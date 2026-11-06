@@ -93,7 +93,7 @@ no letter placeholders.
 | امیدبانک | `omid.png` | Official mark; omidbank.ir |
 | گرین بانک | `greenbank.svg` | Official; greenbank.ir |
 | فوربیکس | `forbix.png` | Official; forbix.ir |
-| ویپاد | `vipad.png` | Public brand mark |
+| ویپاد | `vipad.png` | App icon from the official Sibche listing |
 | کیوبانک | `qbank.png` | Public brand mark |
 | باران | `baran.png` | Public brand mark |
 | بام | `bam.png` | Public brand mark |

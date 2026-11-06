@@ -46,7 +46,7 @@ grant of license, and are not covered by the project's source license.
 
 | File | Mark |
 |---|---|
-| `vipad.png` | Vipad (ویپاد) |
+| `vipad.png` | Vipad (ویپاد) — app icon from the Sibche listing |
 | `qbank.png` | QBank (کیوبانک) |
 | `baran.png` | Baran (باران) |
 | `bam.png` | Bam (بام) |
