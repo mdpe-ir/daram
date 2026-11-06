@@ -73,34 +73,39 @@ DARAM does not load any image, icon or font from the network at runtime. Everyth
 
 ### Neobank marks
 
-The catalog has 26 digital banks. Seven have an official standalone mark
-bundled — **BluBank**, **Bankino**, **Banket**, **HiBank**, **OmidBank**,
-**GreenBank** and **ForBix**. The remaining 19 use their parent bank's mark in
-the picker (the subtitle shows the parent), because no standalone public asset
-could be verified. There are no letter placeholders.
+The catalog has 26 digital banks. Fifteen have a standalone mark bundled:
 
-| Digital bank | Bundled mark | Source |
+- **Official marks (7):** BluBank, Bankino, Banket, HiBank, OmidBank,
+  GreenBank, ForBix.
+- **Additional public brand marks (8):** Vipad, QBank, Baran, Bam, Bajet,
+  Sepino, MetaBank, RedBank.
+
+The remaining 11 digital banks have no verifiable standalone mark; the picker
+uses their parent bank's logo and displays the parent in the subtitle. There are
+no letter placeholders.
+
+| Digital bank | Bundled mark | Kind / source |
 |---|---|---|
-| بلوبانک | `blue.svg` | Wikimedia Commons, CC BY-SA 4.0 |
-| بانکینو | `bankino.png` | Official Bankino app icon (Cafe Bazaar listing) |
-| بانکت | `banket.png` | banket.app |
-| های‌بانک | `hibank.png` | hibank.ir |
-| امیدبانک | `omid.png` | omidbank.ir (wordmark) |
-| گرین بانک | `greenbank.svg` | greenbank.ir |
-| فوربیکس | `forbix.png` | forbix.ir |
-| ویپاد | `pasargad.svg` | Parent: بانک پاسارگاد |
+| بلوبانک | `blue.svg` | Official; Wikimedia Commons, CC BY-SA 4.0 |
+| بانکینو | `bankino.png` | Official app icon (Cafe Bazaar listing) |
+| بانکت | `banket.png` | Official; banket.app |
+| های‌بانک | `hibank.png` | Official; hibank.ir |
+| امیدبانک | `omid.png` | Official wordmark; omidbank.ir |
+| گرین بانک | `greenbank.svg` | Official; greenbank.ir |
+| فوربیکس | `forbix.png` | Official; forbix.ir |
+| ویپاد | `vipad.png` | Public brand mark |
+| کیوبانک | `qbank.png` | Public brand mark |
+| باران | `baran.png` | Public brand mark |
+| بام | `bam.png` | Public brand mark |
+| باجت | `bajet.png` | Public brand mark |
+| سپینو | `sepino.png` | Public brand mark |
+| متابانک | `metabank.png` | Public brand mark |
+| ردبانک | `redbank.png` | Public brand mark |
 | دیما | `mellat.svg` | Parent: بانک ملت |
-| کیوبانک | `mehr_iran.svg` | Parent: بانک قرض‌الحسنه مهر ایران |
 | توبانک | `gardeshgari.svg` | Parent: بانک گردشگری |
-| باران | `keshavarzi.svg` | Parent: بانک کشاورزی |
-| بام | `melli.svg` | Parent: بانک ملی ایران |
-| باجت | `tejarat.svg` | Parent: بانک تجارت |
-| سپینو | `saderat.svg` | Parent: بانک صادرات ایران |
-| متابانک | `melall.svg` | Parent: مؤسسه اعتباری ملل |
-| بانکواره | `tosee_taavon.svg` | Parent: بانک توسعه تعاون |
 | فرارفاه | `refah.svg` | Parent: بانک رفاه کارگران |
+| بانکواره | `tosee_taavon.svg` | Parent: بانک توسعه تعاون |
 | فراز بانک | `iran_zamin.svg` | Parent: بانک ایران زمین |
-| ردبانک | `shahr.svg` | Parent: بانک شهر |
 | پارسیان من | `parsian.svg` | Parent: بانک پارسیان |
 | تیم بانک | `sanat_madan.svg` | Parent: بانک صنعت و معدن |
 | سرمایه دیجیتال | `sarmayeh.svg` | Parent: بانک سرمایه |
@@ -108,9 +113,9 @@ could be verified. There are no letter placeholders.
 | آبانک | `melli.svg` | Parent: بانک ملی ایران |
 | نئون | `eghtesad_novin.svg` | Parent: بانک اقتصاد نوین |
 
-The 47 unique files serve 66 catalog entries; some parent marks are intentionally
+The 55 unique files serve 66 catalog entries; some parent marks are intentionally
 shared. The picker always displays the digital bank's name and its parent, so a
-shared mark is not presented as a standalone logo. The official neobank marks
+shared mark is not presented as a standalone logo. All included neobank marks
 are trademarks of their owners and are used only to identify the user's own
 account; they are not covered by the project's source license. See
 [`assets/banks/ATTRIBUTION.md`](../assets/banks/ATTRIBUTION.md).

@@ -62,7 +62,7 @@ void main() {
     }
     final withLogos = iranianBanks.where((bank) => bank.logoAsset != null);
     expect(withLogos.length, 66);
-    expect(withLogos.map((bank) => bank.logoAsset).toSet().length, 47);
+    expect(withLogos.map((bank) => bank.logoAsset).toSet().length, 55);
     for (final bank in withLogos) {
       final data = await rootBundle.load(bank.logoAsset!);
       expect(data.lengthInBytes, greaterThan(200), reason: bank.logoAsset);

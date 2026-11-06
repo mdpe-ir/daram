@@ -269,7 +269,7 @@ Foreign keys are enabled (`PRAGMA foreign_keys = ON`), indexes cover dates, acco
 | DARAM mark, icon, splash, UI | original, created for this project | project identity |
 | Prompt and few-shot examples | original, written for this project | project content |
 
-Seven digital banks have an official standalone mark; the other 19 use their parent bank's logo (the parent is shown in the picker). There are no generated letter placeholders. Logos are used for identification only. See [`docs/ASSETS.md`](docs/ASSETS.md) and [`assets/banks/ATTRIBUTION.md`](assets/banks/ATTRIBUTION.md).
+Fifteen digital banks have a standalone mark (seven official marks plus eight public brand marks); the other 11 use their parent bank's logo, shown with the parent in the picker. There are no generated letter placeholders. Logos are used for identification only. See [`docs/ASSETS.md`](docs/ASSETS.md) and [`assets/banks/ATTRIBUTION.md`](assets/banks/ATTRIBUTION.md).
 
 ## 11. Testing
 
@@ -291,7 +291,7 @@ Coverage highlights:
 - Widget: splash/onboarding/chat, draft confirmation writes to Drift, dashboard/records/settings rendering, dark mode, RTL.
 - Integration: three activities in one message → three cards → **تأیید همه** → three records with correct balances.
 
-**No real API key is required** for any test. The current suite is **90 tests** across the unit, widget and integration suites, including the 66-entry/47-mark bank catalog and the searchable bank picker.
+**No real API key is required** for any test. The current suite is **90 tests** across the unit, widget and integration suites, including the 66-entry/55-mark bank catalog and the searchable bank picker.
 
 ## 12. Builds
 
@@ -379,7 +379,7 @@ python3 -m http.server 8080 --directory build/web
 - **Linux-specific limits:** saving the API key requires a running keyring (GNOME Keyring/KWallet); export/import needs `zenity` or `qarma`.
 - **Phase 1 deliberately has no** voice, SMS parsing, bank APIs, cloud sync, accounts/auth, budgets, goals or recurring transactions.
 - **AI quality depends on the chosen model.** Tool-calling models are strongly preferred; JSON mode is a fallback, not an equal experience.
-- **Bank catalog:** names follow public Iranian banking/neobank lists and may lag regulatory mergers. Users can always add a custom bank or neobank. Digital banks without a verified standalone mark reuse their parent bank's logo; official neobank marks are trademarks used only for identification.
+- **Bank catalog:** names follow public Iranian banking/neobank lists and may lag regulatory mergers. Users can always add a custom bank or neobank. Fifteen digital banks have a bundled standalone mark; the remaining 11 reuse their parent bank's logo. All marks are trademarks used only for identification.
 - **Transfers cannot be edited in place.** They can be deleted (with confirmation); fee rows are protected from direct edits.
 - **Undo covers AI-confirmed operations** (transaction, transfer, loan, installment payment, empty account). It refuses when dependent records exist (e.g. an account with transactions). Manual edits/deletes are not journaled.
 - **Loan model:** equal installments; remainder on the last; total interest split evenly; no amortization schedule or interest-rate calculation. Interest is tracked on the loan, not auto-booked as an expense.

@@ -38,28 +38,36 @@ redistribute the app without permission or if the owner asks.
 | `greenbank.svg` | GreenBank | https://greenbank.ir/ |
 | `forbix.png` | ForBix | https://www.forbix.ir/ |
 
+## Additional standalone neobank marks
+
+These marks were sourced from public brand imagery and are bundled only to
+identify the user's own account. They are **trademarks** of their owners, not a
+grant of license, and are not covered by the project's source license.
+
+| File | Mark |
+|---|---|
+| `vipad.png` | Vipad (ویپاد) |
+| `qbank.png` | QBank (کیوبانک) |
+| `baran.png` | Baran (باران) |
+| `bam.png` | Bam (بام) |
+| `bajet.png` | Bajet (باجت) |
+| `sepino.png` | Sepino (سپینو) |
+| `metabank.png` | MetaBank (متابانک) |
+| `redbank.png` | RedBank (ردبانک) |
+
 ## Digital banks using their parent's mark
 
-The following digital banks do not have a standalone mark in this asset set;
-the picker uses the parent bank's logo and shows the parent in the subtitle.
-The parent logo files are CC0 (from `zegond/logos-per-banks`) and are reused
-intentionally, not mistakenly attributed.
+The following 11 digital banks have no verified standalone mark in this asset
+set; the picker uses the parent bank's logo and shows the parent in the
+subtitle. The parent logo files are CC0 and are reused intentionally.
 
 | Digital bank | Parent | File |
 |---|---|---|
-| Vipad (ویپاد) | بانک پاسارگاد | `pasargad.svg` |
 | Dima (دیما) | بانک ملت | `mellat.svg` |
-| QBank (کیوبانک) | بانک قرض‌الحسنه مهر ایران | `mehr_iran.svg` |
 | ToBank (توبانک) | بانک گردشگری | `gardeshgari.svg` |
-| Baran (باران) | بانک کشاورزی | `keshavarzi.svg` |
-| Bam (بام) | بانک ملی ایران | `melli.svg` |
-| Bajet (باجت) | بانک تجارت | `tejarat.svg` |
-| Sepino (سپینو) | بانک صادرات ایران | `saderat.svg` |
-| MetaBank (متابانک) | مؤسسه اعتباری ملل | `melall.svg` |
-| Bankvareh (بانکواره) | بانک توسعه تعاون | `tosee_taavon.svg` |
 | Fararefah (فرارفاه) | بانک رفاه کارگران | `refah.svg` |
+| Bankvareh (بانکواره) | بانک توسعه تعاون | `tosee_taavon.svg` |
 | FarazBank (فراز بانک) | بانک ایران زمین | `iran_zamin.svg` |
-| RedBank (ردبانک) | بانک شهر | `shahr.svg` |
 | Parsian Man (پارسیان من) | بانک پارسیان | `parsian.svg` |
 | TeamBank (تیم بانک) | بانک صنعت و معدن | `sanat_madan.svg` |
 | Sarmayeh Digital (سرمایه دیجیتال) | بانک سرمایه | `sarmayeh.svg` |
