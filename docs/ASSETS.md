@@ -90,7 +90,7 @@ no letter placeholders.
 | بانکینو | `bankino.png` | Official app icon (Cafe Bazaar listing) |
 | بانکت | `banket.png` | Official; banket.app |
 | های‌بانک | `hibank.png` | Official; hibank.ir |
-| امیدبانک | `omid.png` | Official wordmark; omidbank.ir |
+| امیدبانک | `omid.png` | Official mark; omidbank.ir |
 | گرین بانک | `greenbank.svg` | Official; greenbank.ir |
 | فوربیکس | `forbix.png` | Official; forbix.ir |
 | ویپاد | `vipad.png` | Public brand mark |

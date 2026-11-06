@@ -566,7 +566,6 @@ const List<IranianBank> iranianBanks = <IranianBank>[
     nameEn: 'OmidBank',
     colorHex: '#0E7490',
     logoAsset: 'assets/banks/omid.png',
-    logoIsWordmark: true,
     kind: BankKind.digitalBank,
     parentBank: 'بانک سپه',
     aliases: ['امید', 'omid'],
