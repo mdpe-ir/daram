@@ -87,6 +87,11 @@ valid. The script prints the SHA-256 certificate fingerprint.
 > ```
 >
 > The password prompt is skipped; path, alias and DN are still confirmed.
+>
+> On failure the script prints the offending byte and position. Bytes `0xD9` /
+> `0xDB` usually mean Persian digits; `0x1B` means a pasted terminal escape
+> sequence. The env-based form bypasses terminal input entirely and is the most
+> reliable fix.
 
 > **Back up the keystore and `key.properties` now.** If you lose them you cannot
 > publish updates to an app users already installed with that signature. Keep a

@@ -211,7 +211,8 @@ properties_unescape() {
 password_is_ascii() {
     local value="$1"
     local old_lc="${LC_ALL:-}"
-    local i char code
+    local i char code kind
+    PASSWORD_INVALID_DETAIL=""
     export LC_ALL=C
     for ((i = 0; i < ${#value}; i++)); do
         char="${value:i:1}"
@@ -219,7 +220,13 @@ password_is_ascii() {
             "'") code=39 ;;
             *) printf -v code '%d' "'$char" 2>/dev/null || code=255 ;;
         esac
-        if ((code < 32 || code > 126)); then
+        if ((code < 32 || code == 127 || code > 126)); then
+            if ((code < 32 || code == 127)); then
+                kind="a control/escape character"
+            else
+                kind="a non-ASCII character"
+            fi
+            PASSWORD_INVALID_DETAIL="byte 0x$(printf '%02X' "$code") at byte position $((i + 1)) ($kind)"
             [[ -n "$old_lc" ]] && export LC_ALL="$old_lc" || unset LC_ALL
             return 1
         fi
@@ -424,18 +431,35 @@ generate_keystore() {
     [[ "$KEY_ALIAS" =~ ^[A-Za-z0-9._-]+$ ]] || die "Key alias may only contain letters, digits, dot, dash or underscore."
 
     local store_pass="${KEYSTORE_PASSWORD:-}"
+    local confirm_pass=""
     if [[ -z "$store_pass" ]]; then
         if [[ "$NON_INTERACTIVE" == true ]]; then
             die "KEYSTORE_PASSWORD is required for --non-interactive --keygen."
         fi
-        store_pass="$(read_secret "Keystore password (min 6 chars, printable ASCII; symbols allowed): ")"
-        local confirm_pass
-        confirm_pass="$(read_secret "Confirm keystore password: ")"
-        [[ "$store_pass" == "$confirm_pass" ]] || die "Passwords do not match."
+        local attempt=1
+        while :; do
+            store_pass="$(read_secret "Keystore password (min 6 chars, printable ASCII; symbols allowed): ")"
+            confirm_pass="$(read_secret "Confirm keystore password: ")"
+            if [[ "$store_pass" != "$confirm_pass" ]]; then
+                warn "Passwords do not match."
+            elif [[ ${#store_pass} -lt 6 ]]; then
+                warn "Use at least 6 characters."
+            elif password_is_ascii "$store_pass"; then
+                break
+            else
+                warn "Invalid input: ${PASSWORD_INVALID_DETAIL}."
+                warn "Do not paste; type on an English layout, or set KEYSTORE_PASSWORD."
+            fi
+            if ((attempt >= 3)); then
+                die "Aborting after 3 attempts. Run: KEYSTORE_PASSWORD='your-password' ./scripts/release.sh --keygen --non-interactive"
+            fi
+            attempt=$((attempt + 1))
+            warn "Try again (attempt $attempt/3)."
+        done
     fi
     [[ ${#store_pass} -ge 6 ]] || die "Keystore password must be at least 6 characters."
     if ! password_is_ascii "$store_pass"; then
-        die "The password contains a non-ASCII or control character (Persian/Arabic digits, an IME character, or a pasted terminal escape sequence). keytool only accepts ASCII. Type it manually on an English layout, or use KEYSTORE_PASSWORD='...' with --keygen --non-interactive."
+        die "The password contains ${PASSWORD_INVALID_DETAIL}. keytool only accepts printable ASCII. Switch to an English layout, type manually, or use KEYSTORE_PASSWORD='...' with --keygen --non-interactive."
     fi
 
     local dname="$DEFAULT_DNAME"
