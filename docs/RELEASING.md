@@ -75,11 +75,18 @@ command-line argument, and is never printed. It is escaped when written to
 `key.properties` and unescaped for validation. A password like `@Ali122` is
 valid. The script prints the SHA-256 certificate fingerprint.
 
-> **Keyboard layout warning:** `keytool` only accepts ASCII characters. Persian
-> or Arabic keyboard layouts can produce non-ASCII digits (۱۲۳ instead of 123)
-> or invisible characters even when the password looks correct. The script now
-> checks the bytes and rejects them with a clear message. Switch to an English
-> layout, or use the non-interactive form with `KEYSTORE_PASSWORD`.
+> **Keyboard/paste warning:** `keytool` only accepts ASCII characters. Persian
+> or Arabic keyboard layouts can produce non-ASCII digits (۱۲۳ instead of 123),
+> and pasting into a hidden prompt can carry bracketed-paste escape codes. The
+> script strips bracketed-paste markers, checks the bytes, and rejects real
+> non-ASCII input with a clear message. If your terminal still injects
+> characters, pass the password through the environment instead:
+>
+> ```bash
+> KEYSTORE_PASSWORD='your-password' ./scripts/release.sh
+> ```
+>
+> The password prompt is skipped; path, alias and DN are still confirmed.
 
 > **Back up the keystore and `key.properties` now.** If you lose them you cannot
 > publish updates to an app users already installed with that signature. Keep a

@@ -131,14 +131,22 @@ read_secret() {
     local prompt="$1"
     local result=""
     if [[ -t 0 ]]; then
-        read -r -s -p "$prompt" result
+        # -e lets Readline consume bracketed-paste markers cleanly.
+        read -r -s -e -p "$prompt" result
         echo
     elif [[ -r /dev/tty ]]; then
-        read -r -s -p "$prompt" result < /dev/tty
+        read -r -s -e -p "$prompt" result < /dev/tty
         echo
     else
         die "No interactive terminal for a password prompt; set KEYSTORE_PASSWORD."
     fi
+    # Some terminals still leave these when the parent shell enabled bracketed
+    # paste: ESC[200~ ... ESC[201~, plus a possible carriage return.
+    local paste_start=$'\e[200~'
+    local paste_end=$'\e[201~'
+    result="${result//$'\r'/}"
+    result="${result//"$paste_start"/}"
+    result="${result//"$paste_end"/}"
     printf '%s' "$result"
 }
 
@@ -427,7 +435,7 @@ generate_keystore() {
     fi
     [[ ${#store_pass} -ge 6 ]] || die "Keystore password must be at least 6 characters."
     if ! password_is_ascii "$store_pass"; then
-        die "The password contains a non-ASCII character (for example Persian/Arabic digits from a non-English keyboard layout). keytool only accepts ASCII. Switch to an English layout, or use KEYSTORE_PASSWORD='...' with --keygen --non-interactive."
+        die "The password contains a non-ASCII or control character (Persian/Arabic digits, an IME character, or a pasted terminal escape sequence). keytool only accepts ASCII. Type it manually on an English layout, or use KEYSTORE_PASSWORD='...' with --keygen --non-interactive."
     fi
 
     local dname="$DEFAULT_DNAME"
