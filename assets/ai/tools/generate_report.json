@@ -1,0 +1,32 @@
+{
+  "name": "generate_report",
+  "description": "ساخت گزارش مالی از داده‌های محلی. مجموع‌ها و تفکیک دسته‌بندی توسط برنامه محاسبه می‌شوند؛ آن‌ها را خودت محاسبه یا بازنویسی نکن. تاریخ شروع و پایان باید مشخص باشد.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "start_date": {
+        "type": "string",
+        "description": "شروع بازه گزارش؛ ISO میلادی یا شمسی یا عبارت نسبی."
+      },
+      "end_date": {
+        "type": "string",
+        "description": "پایان بازه گزارش (شامل همان روز)."
+      },
+      "account_filter": {
+        "type": "string",
+        "description": "محدود کردن گزارش به یک حساب."
+      },
+      "category_filter": {
+        "type": "string",
+        "description": "محدود کردن گزارش به یک دسته‌بندی."
+      },
+      "grouping": {
+        "type": "string",
+        "enum": ["category", "month", "account"],
+        "description": "نحوه تفکیک گزارش."
+      }
+    },
+    "required": ["start_date", "end_date"],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "name": "add_loan",
+  "description": "ثبت وام و ساخت جدول اقساط. وام هرگز درآمد نیست. تاریخ سررسید همه اقساط باید مشخص باشد؛ اگر کاربر تاریخ‌ها را نگفته، قبل از فراخوانی سؤال کن. سود یا کارمزد را هرگز حدس نزن.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "عنوان وام، مثلاً «وام خرید خودرو»."
+      },
+      "principal_amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ اصل وام به واحد amount_unit."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ اصل وام."
+      },
+      "installment_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 360,
+        "description": "تعداد اقساط."
+      },
+      "installment_amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ هر قسط در صورت اعلام کاربر. اگر اقساط مساوی هستند و مبلغ ذکر نشده، این مقدار را حذف کن."
+      },
+      "account": {
+        "type": "string",
+        "description": "حسابی که مبلغ وام به آن واریز شده یا اقساط از آن پرداخت می‌شود (نام یا شناسه)."
+      },
+      "start_date": {
+        "type": "string",
+        "description": "تاریخ دریافت وام؛ ISO میلادی یا شمسی یا عبارت نسبی."
+      },
+      "installment_due_dates": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "description": "تاریخ سررسید تک‌تک اقساط به ترتیب. تعداد باید با installment_count برابر باشد."
+      },
+      "interest_information": {
+        "type": "object",
+        "description": "اطلاعات سود یا کارمزد فقط در صورت اعلام صریح کاربر.",
+        "properties": {
+          "description": { "type": "string" },
+          "total_interest_amount": { "type": "number", "minimum": 0 },
+          "amount_unit": { "type": "string", "enum": ["toman", "rial"] }
+        },
+        "additionalProperties": false
+      },
+      "description": {
+        "type": "string",
+        "description": "توضیح اختیاری وام."
+      }
+    },
+    "required": [
+      "title",
+      "principal_amount",
+      "amount_unit",
+      "installment_count",
+      "start_date",
+      "installment_due_dates"
+    ],
+    "additionalProperties": false
+  }
+}

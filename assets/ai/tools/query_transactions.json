@@ -1,0 +1,42 @@
+{
+  "name": "query_transactions",
+  "description": "جست‌وجوی تراکنش‌های ذخیره‌شده. برای پاسخ به سؤال‌هایی مثل «این ماه چقدر خرج کردم» یا «چی برای ناهار دادم» از این ابزار استفاده کن. نتیجه را خودت جمع نزن؛ اعداد برگشتی مرجع هستند.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "date_range": {
+        "type": "object",
+        "description": "بازه تاریخ؛ هر طرف می‌تواند ISO میلادی، شمسی یا عبارت نسبی باشد.",
+        "properties": {
+          "start": { "type": "string" },
+          "end": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "transaction_type": {
+        "type": "string",
+        "enum": ["income", "expense", "all"],
+        "description": "نوع تراکنش یا همه."
+      },
+      "account_filter": {
+        "type": "string",
+        "description": "نام یا شناسه حساب در صورت نیاز."
+      },
+      "category_filter": {
+        "type": "string",
+        "description": "نام یا شناسه دسته‌بندی در صورت نیاز."
+      },
+      "search_query": {
+        "type": "string",
+        "description": "عبارت جست‌وجو در توضیح تراکنش."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "description": "حداکثر تعداد نتیجه."
+      }
+    },
+    "additionalProperties": false
+  }
+}

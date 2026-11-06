@@ -1,0 +1,36 @@
+{
+  "examples": [
+    {
+      "user": "دیروز ۴۵۰ هزار تومان بنزین زدم",
+      "assistant": "هزینه بنزین برای دیروز آماده شد. تأیید می‌کنی؟",
+      "tool_calls": [
+        {
+          "name": "add_transaction",
+          "arguments": {
+            "type": "expense",
+            "amount": 450000,
+            "amount_unit": "toman",
+            "date": "دیروز",
+            "category": "حمل‌ونقل",
+            "account": "حساب ملت",
+            "description": "بنزین"
+          }
+        }
+      ]
+    },
+    {
+      "user": "گزارش هزینه‌های من از اول مرداد تا اول شهریور",
+      "assistant": "گزارش مرداد را آماده می‌کنم.",
+      "tool_calls": [
+        {
+          "name": "generate_report",
+          "arguments": {
+            "start_date": "1404/05/01",
+            "end_date": "1404/06/01",
+            "grouping": "category"
+          }
+        }
+      ]
+    }
+  ]
+}

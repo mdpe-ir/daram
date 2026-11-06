@@ -1,0 +1,43 @@
+{
+  "name": "add_account",
+  "description": "ثبت یک حساب مالی جدید برای کاربر. فقط زمانی از این ابزار استفاده کن که نام بانک، نام حساب، نوع حساب و موجودی اولیه مشخص باشد. هرگز موجودی اولیه را حدس نزن؛ اگر کاربر آن را نگفته، اول سؤال کن.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "bank_name": {
+        "type": "string",
+        "description": "نام بانک، نئوبانک یا مؤسسه مالی؛ مثلاً «بانک ملت»، «بلوبانک»، «بانکینو» یا «ویپاد»."
+      },
+      "account_name": {
+        "type": "string",
+        "description": "نامی که کاربر برای این حساب انتخاب می‌کند، مثلاً «حساب حقوق» یا «کارت اصلی»."
+      },
+      "account_type": {
+        "type": "string",
+        "enum": ["bank", "cash", "digitalWallet", "savings", "other"],
+        "description": "نوع حساب: بانکی، نقدی، کیف پول دیجیتال، پس‌انداز یا سایر."
+      },
+      "initial_balance": {
+        "type": "number",
+        "minimum": 0,
+        "description": "موجودی اولیه به واحد amount_unit. فقط عدد؛ بدون جداکننده یا واحد."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ موجودی اولیه."
+      },
+      "card_last_four_digits": {
+        "type": "string",
+        "pattern": "^[0-9]{4}$",
+        "description": "فقط چهار رقم آخر کارت در صورت ذکر شدن. هرگز شماره کامل کارت یا CVV را درخواست نکن."
+      },
+      "description": {
+        "type": "string",
+        "description": "توضیح اختیاری درباره حساب."
+      }
+    },
+    "required": ["bank_name", "account_name", "account_type", "initial_balance", "amount_unit"],
+    "additionalProperties": false
+  }
+}

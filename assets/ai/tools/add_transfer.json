@@ -1,0 +1,42 @@
+{
+  "name": "add_transfer",
+  "description": "ثبت انتقال پول بین دو حساب متعلق به کاربر. انتقال هرگز درآمد یا هزینه نیست. اگر کاربر کارمزد ذکر کرده، آن را در fee_amount بگذار تا به‌صورت هزینه جدا ثبت شود.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "source_account": {
+        "type": "string",
+        "description": "حساب مبدأ (نام یا شناسه)."
+      },
+      "destination_account": {
+        "type": "string",
+        "description": "حساب مقصد (نام یا شناسه)."
+      },
+      "amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ انتقال به واحد amount_unit."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ انتقال."
+      },
+      "date": {
+        "type": "string",
+        "description": "تاریخ انتقال؛ ISO میلادی یا شمسی یا عبارت نسبی."
+      },
+      "fee_amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "کارمزد انتقال در صورت ذکر شدن؛ در غیر این صورت صفر."
+      },
+      "description": {
+        "type": "string",
+        "description": "توضیح اختیاری انتقال."
+      }
+    },
+    "required": ["source_account", "destination_account", "amount", "amount_unit", "date"],
+    "additionalProperties": false
+  }
+}

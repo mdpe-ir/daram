@@ -1,0 +1,37 @@
+{
+  "examples": [
+    {
+      "user": "۵ میلیون تومن از حساب ملت به بلو بانک انتقال دادم",
+      "assistant": "این یک انتقال است و در درآمد یا هزینه حساب نمی‌شود. پیش‌نویس انتقال آماده شد؛ تأیید می‌کنی؟",
+      "tool_calls": [
+        {
+          "name": "add_transfer",
+          "arguments": {
+            "source_account": "حساب ملت",
+            "destination_account": "بلو بانک",
+            "amount": 5000000,
+            "amount_unit": "toman",
+            "date": "امروز"
+          }
+        }
+      ]
+    },
+    {
+      "user": "۵۰۰ هزار از ملتم زدم به بلو بانکم، ۵ تومن هم کارمزد دادم",
+      "assistant": "انتقال ۵۰۰,۰۰۰ تومانی با کارمزد ۵ تومانی آماده شد. کارمزد به‌صورت هزینه جدا ثبت می‌شود.",
+      "tool_calls": [
+        {
+          "name": "add_transfer",
+          "arguments": {
+            "source_account": "حساب ملت",
+            "destination_account": "بلو بانک",
+            "amount": 500000,
+            "amount_unit": "toman",
+            "fee_amount": 5,
+            "date": "امروز"
+          }
+        }
+      ]
+    }
+  ]
+}

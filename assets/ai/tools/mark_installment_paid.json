@@ -1,0 +1,33 @@
+{
+  "name": "mark_installment_paid",
+  "description": "ثبت پرداخت یک قسط. شناسه وام و قسط یا شماره قسط را بده. اگر مبلغ پرداختی با مبلغ قسط متفاوت است، مبلغ واقعی پرداخت را بده.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "loan_id": {
+        "type": "string",
+        "description": "شناسه یا عنوان وام."
+      },
+      "installment_id": {
+        "type": "string",
+        "description": "شناسه قسط یا شماره آن (مثلاً «2»)."
+      },
+      "payment_date": {
+        "type": "string",
+        "description": "تاریخ پرداخت؛ ISO میلادی یا شمسی یا عبارت نسبی."
+      },
+      "paid_amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ پرداخت‌شده به واحد amount_unit."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ پرداختی."
+      }
+    },
+    "required": ["loan_id", "installment_id", "payment_date", "paid_amount", "amount_unit"],
+    "additionalProperties": false
+  }
+}

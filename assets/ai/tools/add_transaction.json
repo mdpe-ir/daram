@@ -1,0 +1,42 @@
+{
+  "name": "add_transaction",
+  "description": "ثبت یک درآمد یا هزینه. برای هر فعالیت مالی جداگانه یک فراخوانی جدا بزن. انتقال بین حساب‌ها تراکنش نیست و باید با add_transfer ثبت شود. مبلغ را همیشه به عدد و واحد مشخص بده.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "enum": ["income", "expense"],
+        "description": "نوع تراکنش: درآمد یا هزینه."
+      },
+      "amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ به واحد amount_unit. فقط عدد؛ مثلاً 250000 برای ۲۵۰ هزار تومان."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ. اگر کاربر واحد را نگفته از واحد نمایشی پیش‌فرض استفاده کن."
+      },
+      "date": {
+        "type": "string",
+        "description": "تاریخ تراکنش. ترجیحاً تاریخ میلادی ISO مثل 2025-08-13؛ تاریخ شمسی مثل 1404/05/23 هم پذیرفته است. برای عبارت‌های نسبی می‌توانی «امروز» یا «دیروز» را بفرستی."
+      },
+      "category": {
+        "type": "string",
+        "description": "نام دسته‌بندی موجود از فهرست دسته‌بندی‌ها. اگر هیچ دسته‌ای مناسب نبود، «سایر هزینه‌ها» یا «سایر درآمدها»."
+      },
+      "account": {
+        "type": "string",
+        "description": "نام یا شناسه حساب موجود که تراکنش از آن انجام شده است."
+      },
+      "description": {
+        "type": "string",
+        "description": "توضیح کوتاه از تراکنش، مثلاً «ناهار» یا «حقوق مرداد»."
+      }
+    },
+    "required": ["type", "amount", "amount_unit", "date", "category", "account"],
+    "additionalProperties": false
+  }
+}

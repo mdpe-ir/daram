@@ -1,0 +1,64 @@
+{
+  "examples": [
+    {
+      "user": "امروز ۲۵۰ هزار تومن ناهار خوردم",
+      "assistant": "۲۵۰,۰۰۰ تومان هزینه ناهار برای امروز آماده شد. تأیید می‌کنی؟",
+      "tool_calls": [
+        {
+          "name": "add_transaction",
+          "arguments": {
+            "type": "expense",
+            "amount": 250000,
+            "amount_unit": "toman",
+            "date": "امروز",
+            "category": "خوراک و رستوران",
+            "account": "حساب ملت",
+            "description": "ناهار"
+          }
+        }
+      ]
+    },
+    {
+      "user": "امروز ۵۰۰ هزار تومن اسنپ دادم، ۳ میلیون حقوق گرفتم و ۲۰۰ هزار تومن خرید کردم.",
+      "assistant": "سه تراکنش جدا آماده شد: هزینه اسنپ، درآمد حقوق و هزینه خرید. هر کدام را می‌توانی جدا تأیید کنی.",
+      "tool_calls": [
+        {
+          "name": "add_transaction",
+          "arguments": {
+            "type": "expense",
+            "amount": 500000,
+            "amount_unit": "toman",
+            "date": "امروز",
+            "category": "حمل‌ونقل",
+            "account": "حساب ملت",
+            "description": "اسنپ"
+          }
+        },
+        {
+          "name": "add_transaction",
+          "arguments": {
+            "type": "income",
+            "amount": 3000000,
+            "amount_unit": "toman",
+            "date": "امروز",
+            "category": "حقوق",
+            "account": "حساب ملت",
+            "description": "حقوق"
+          }
+        },
+        {
+          "name": "add_transaction",
+          "arguments": {
+            "type": "expense",
+            "amount": 200000,
+            "amount_unit": "toman",
+            "date": "امروز",
+            "category": "خرید",
+            "account": "حساب ملت",
+            "description": "خرید"
+          }
+        }
+      ]
+    }
+  ]
+}
