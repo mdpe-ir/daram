@@ -63,14 +63,17 @@ The first Android release asks whether to create a keystore. It creates:
 
 You are prompted for:
 
-- a store/key password (minimum 6 characters; letters, digits and
-  `._@#%+!-` are accepted so the Java properties file stays valid),
+- a store/key password (minimum 6 characters; **any printable ASCII** is
+  accepted, including spaces and symbols such as `@ # ! : =`). Values are
+  escaped for `key.properties`; non-ASCII passwords are not supported by the
+  Java properties format,
 - the key alias (default `daram`),
 - the certificate distinguished name (a sensible Iran/DARAM default is offered).
 
 The password is passed to `keytool` through an environment variable, not as a
-command-line argument, and is never printed. The script prints the SHA-256
-certificate fingerprint.
+command-line argument, and is never printed. It is escaped when written to
+`key.properties` and unescaped for validation. A password like `@Ali122` is
+valid. The script prints the SHA-256 certificate fingerprint.
 
 > **Back up the keystore and `key.properties` now.** If you lose them you cannot
 > publish updates to an app users already installed with that signature. Keep a

@@ -92,7 +92,7 @@ Signing:
 
 Environment:
   KEYSTORE_PATH       Override the keystore output path
-  KEYSTORE_PASSWORD   Store/key password (min 6 chars, safe characters only)
+  KEYSTORE_PASSWORD   Store/key password (min 6 printable ASCII characters)
   KEY_ALIAS           Key alias (default: daram)
   KEY_DNAME           Certificate distinguished name
   DIST_DIR            Artifact directory (default: ./dist)
@@ -148,6 +148,53 @@ confirm() {
     local answer
     answer="$(read_prompt "$prompt" "$default")"
     [[ "$answer" =~ ^[Yy] ]]
+}
+
+# Escape a value for a Java .properties file. Gradle reads key.properties with
+# java.util.Properties, so spaces, ':', '=', '#', '!' and backslashes need the
+# properties-file escaping rather than a restrictive password policy.
+properties_escape() {
+    local value="$1"
+    local out=""
+    local char
+    local i
+    for ((i = 0; i < ${#value}; i++)); do
+        char="${value:i:1}"
+        case "$char" in
+            '\') out+='\\' ;;
+            ' ') out+='\ ' ;;
+            ':') out+='\:' ;;
+            '=') out+='\=' ;;
+            '#') out+='\#' ;;
+            '!') out+='\!' ;;
+            $'\t') out+='\t' ;;
+            *) out+="$char" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+properties_unescape() {
+    local value="$1"
+    local out=""
+    local char
+    local i
+    for ((i = 0; i < ${#value}; i++)); do
+        char="${value:i:1}"
+        if [[ "$char" == '\' ]]; then
+            i=$((i + 1))
+            char="${value:i:1}"
+            case "$char" in
+                t) out+=$'\t' ;;
+                n) out+=$'\n' ;;
+                r) out+=$'\r' ;;
+                *) out+="$char" ;;
+            esac
+        else
+            out+="$char"
+        fi
+    done
+    printf '%s' "$out"
 }
 
 parse_args() {
@@ -292,15 +339,15 @@ validate_signing() {
     prepare_java
     [[ -s "$KEY_PROPERTIES" ]] || die "android/key.properties is missing or empty."
 
-    local store_file alias store_pass store_path
+    local store_file alias store_pass key_password store_path
     store_file="$(sed -n 's/^storeFile=//p' "$KEY_PROPERTIES" | head -1)"
     alias="$(sed -n 's/^keyAlias=//p' "$KEY_PROPERTIES" | head -1)"
-    store_pass="$(sed -n 's/^storePassword=//p' "$KEY_PROPERTIES" | head -1)"
+    store_pass="$(properties_unescape "$(sed -n 's/^storePassword=//p' "$KEY_PROPERTIES" | head -1)")"
+    key_password="$(properties_unescape "$(sed -n 's/^keyPassword=//p' "$KEY_PROPERTIES" | head -1)")"
 
     [[ -n "$store_file" && -n "$alias" && -n "$store_pass" ]] || \
         die "android/key.properties must contain storeFile, storePassword, keyAlias and keyPassword."
-    [[ -n "$(sed -n 's/^keyPassword=//p' "$KEY_PROPERTIES" | head -1)" ]] || \
-        die "android/key.properties is missing keyPassword."
+    [[ -n "$key_password" ]] || die "android/key.properties is missing keyPassword."
 
     store_path="$store_file"
     if [[ "$store_path" != /* ]]; then
@@ -350,14 +397,18 @@ generate_keystore() {
         if [[ "$NON_INTERACTIVE" == true ]]; then
             die "KEYSTORE_PASSWORD is required for --non-interactive --keygen."
         fi
-        store_pass="$(read_secret "Keystore password (min 6 chars, letters/digits/._@#%+!-): ")"
+        store_pass="$(read_secret "Keystore password (min 6 chars, printable ASCII; symbols allowed): ")"
         local confirm_pass
         confirm_pass="$(read_secret "Confirm keystore password: ")"
         [[ "$store_pass" == "$confirm_pass" ]] || die "Passwords do not match."
     fi
     [[ ${#store_pass} -ge 6 ]] || die "Keystore password must be at least 6 characters."
-    [[ "$store_pass" =~ ^[A-Za-z0-9._@#%+!-]+$ ]] || \
-        die "Password may only contain letters, digits and . _ @ # % + ! - (properties-file safety)."
+    # C locale makes [[:print:]] mean printable ASCII (space through tilde),
+    # including @, #, !, spaces and other symbols. The properties writer
+    # escapes whatever Java needs.
+    if ! printf '%s' "$store_pass" | LC_ALL=C grep -qE '^[[:print:]]+$'; then
+        die "Password may contain printable ASCII characters only (letters, digits, spaces and symbols)."
+    fi
 
     local dname="$DEFAULT_DNAME"
     if [[ "$NON_INTERACTIVE" != true ]]; then
@@ -409,9 +460,11 @@ generate_keystore() {
     local old_umask
     old_umask="$(umask)"
     umask 077
+    local escaped_pass
+    escaped_pass="$(properties_escape "$store_pass")"
     cat > "$KEY_PROPERTIES" <<EOF
-storePassword=$store_pass
-keyPassword=$store_pass
+storePassword=$escaped_pass
+keyPassword=$escaped_pass
 keyAlias=$KEY_ALIAS
 storeFile=$key_path
 EOF
