@@ -416,8 +416,10 @@ class BankAvatar extends StatelessWidget {
         ? _monogramFrom(customName)
         : bank.monogram;
     // Wordmark logos are unreadable in tiny chips; fall back to the monogram.
-    final showLogo =
-        bank.logoAsset != null && !(bank.logoIsWordmark && size < 34);
+    final logo = bank.logoIsWordmark && size < 34 ? null : bank.logoAsset;
+    final isRasterLogo =
+        logo != null &&
+        RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(logo);
     final monogram = Container(
       decoration: BoxDecoration(
         color: bank.color.withValues(alpha: colors.isDark ? 0.18 : 0.10),
@@ -449,15 +451,21 @@ class BankAvatar extends StatelessWidget {
               ),
             )
           : null,
-      child: !showLogo
+      child: logo == null
           ? monogram
           : ClipRRect(
               borderRadius: BorderRadius.circular(size * 0.18),
-              child: SvgPicture.asset(
-                bank.logoAsset!,
-                fit: BoxFit.contain,
-                placeholderBuilder: (_) => monogram,
-              ),
+              child: isRasterLogo
+                  ? Image.asset(
+                      logo,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => monogram,
+                    )
+                  : SvgPicture.asset(
+                      logo,
+                      fit: BoxFit.contain,
+                      placeholderBuilder: (_) => monogram,
+                    ),
             ),
     );
   }

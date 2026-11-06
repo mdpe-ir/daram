@@ -56,9 +56,13 @@ void main() {
     expect(bankByName('سایر')?.id, 'other');
   });
 
-  test('every bundled logo asset exists and is non-empty', () async {
+  test('every bank has an icon and every referenced asset exists', () async {
+    for (final bank in iranianBanks.where((bank) => bank.id != 'other')) {
+      expect(bank.logoAsset, isNotNull, reason: bank.id);
+    }
     final withLogos = iranianBanks.where((bank) => bank.logoAsset != null);
-    expect(withLogos.length, 41);
+    expect(withLogos.length, 66);
+    expect(withLogos.map((bank) => bank.logoAsset).toSet().length, 47);
     for (final bank in withLogos) {
       final data = await rootBundle.load(bank.logoAsset!);
       expect(data.lengthInBytes, greaterThan(200), reason: bank.logoAsset);

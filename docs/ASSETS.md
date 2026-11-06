@@ -71,18 +71,49 @@ DARAM does not load any image, icon or font from the network at runtime. Everyth
   remains a trademark of its owner; the CC license does not grant trademark
   rights. The asset is separate from the application's source code.
 
-### Neobanks
+### Neobank marks
 
-The catalog includes 26 licensed digital banks/neobanks:
+The catalog has 26 digital banks. Seven have an official standalone mark
+bundled — **BluBank**, **Bankino**, **Banket**, **HiBank**, **OmidBank**,
+**GreenBank** and **ForBix**. The remaining 19 use their parent bank's mark in
+the picker (the subtitle shows the parent), because no standalone public asset
+could be verified. There are no letter placeholders.
 
-دیما، کیوبانک، بانکت، ویپاد، بلوبانک، بانکینو، توبانک، های‌بانک، باران،
-امیدبانک، بام، باجت، سپینو، گرین بانک، متابانک، بانکواره، فرارفاه، فراز بانک،
-ردبانک، پارسیان من، تیم بانک، سرمایه دیجیتال، جهش بانک، آبانک، نئون و فوربیکس.
+| Digital bank | Bundled mark | Source |
+|---|---|---|
+| بلوبانک | `blue.svg` | Wikimedia Commons, CC BY-SA 4.0 |
+| بانکینو | `bankino.png` | Official Bankino app icon (Cafe Bazaar listing) |
+| بانکت | `banket.png` | banket.app |
+| های‌بانک | `hibank.png` | hibank.ir |
+| امیدبانک | `omid.png` | omidbank.ir (wordmark) |
+| گرین بانک | `greenbank.svg` | greenbank.ir |
+| فوربیکس | `forbix.png` | forbix.ir |
+| ویپاد | `pasargad.svg` | Parent: بانک پاسارگاد |
+| دیما | `mellat.svg` | Parent: بانک ملت |
+| کیوبانک | `mehr_iran.svg` | Parent: بانک قرض‌الحسنه مهر ایران |
+| توبانک | `gardeshgari.svg` | Parent: بانک گردشگری |
+| باران | `keshavarzi.svg` | Parent: بانک کشاورزی |
+| بام | `melli.svg` | Parent: بانک ملی ایران |
+| باجت | `tejarat.svg` | Parent: بانک تجارت |
+| سپینو | `saderat.svg` | Parent: بانک صادرات ایران |
+| متابانک | `melall.svg` | Parent: مؤسسه اعتباری ملل |
+| بانکواره | `tosee_taavon.svg` | Parent: بانک توسعه تعاون |
+| فرارفاه | `refah.svg` | Parent: بانک رفاه کارگران |
+| فراز بانک | `iran_zamin.svg` | Parent: بانک ایران زمین |
+| ردبانک | `shahr.svg` | Parent: بانک شهر |
+| پارسیان من | `parsian.svg` | Parent: بانک پارسیان |
+| تیم بانک | `sanat_madan.svg` | Parent: بانک صنعت و معدن |
+| سرمایه دیجیتال | `sarmayeh.svg` | Parent: بانک سرمایه |
+| جهش بانک | `iran_zamin.svg` | Parent: بانک ایران زمین |
+| آبانک | `melli.svg` | Parent: بانک ملی ایران |
+| نئون | `eghtesad_novin.svg` | Parent: بانک اقتصاد نوین |
 
-Only BluBank has a freely licensed logo. The rest use a designed monogram with
-a brand colour (the parent bank is shown in the picker), because no
-redistributable asset was found. This is the documented fallback, not a missing
-image.
+The 47 unique files serve 66 catalog entries; some parent marks are intentionally
+shared. The picker always displays the digital bank's name and its parent, so a
+shared mark is not presented as a standalone logo. The official neobank marks
+are trademarks of their owners and are used only to identify the user's own
+account; they are not covered by the project's source license. See
+[`assets/banks/ATTRIBUTION.md`](../assets/banks/ATTRIBUTION.md).
 
 ### Custom banks
 
@@ -138,4 +169,4 @@ The icon pipeline is deterministic: `python3 tool/generate_icon.py` creates the 
 - No Lottie files: the app uses programmatic motion only, so no third-party animation license is involved.
 - No stock photos or illustrations.
 - No Google Fonts or remote SVG/PNG URLs.
-- No neobank logos other than BluBank: no freely licensed assets were found; monograms are used.
+- No invented letter icons: every catalog entry points to a real bank/neobank mark; digital banks without a standalone mark reuse the parent bank's logo (documented above).

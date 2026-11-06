@@ -21,12 +21,57 @@ The remaining SVG files in this directory are from
 released under **CC0 1.0 Universal** (see `LICENSE.txt`). They are bundled
 unmodified and used solely to identify the user's own bank accounts.
 
-## Neobanks without bundled logos
+## Official neobank marks
 
-Bankino, Vipad, Dima, QBank, Banket, ToBank, HiBank, Baran, OmidBank, Bam,
-Bajet, Sepino, GreenBank, MetaBank, Bankvareh, Fararefah, FarazBank, RedBank,
-Parsian Man, TeamBank, Sarmayeh Digital, Jahesh, ABank, Neon and ForBix are
-rendered with a designed monogram and brand colour because no freely licensed
-logo asset was available. They are not missing images: this is the documented
-fallback. The catalog can be extended without a code change by selecting
-«سایر بانکها» and entering a custom bank name.
+These files are the official marks of their owners and are bundled only to
+identify the user's own account. They are **trademarks**, not a grant of license,
+and they are not covered by the project's source license. Replace them if you
+redistribute the app without permission or if the owner asks.
+
+| File | Mark | Source |
+|---|---|---|
+| `blue.svg` | BluBank | Wikimedia Commons, CC BY-SA 4.0 (see above) |
+| `bankino.png` | Bankino | Official app icon, Cafe Bazaar listing `digital.neobank` |
+| `banket.png` | Banket | https://banket.app/ |
+| `hibank.png` | HiBank | https://hibank.ir/ |
+| `omid.png` | OmidBank | https://omidbank.ir/ |
+| `greenbank.svg` | GreenBank | https://greenbank.ir/ |
+| `forbix.png` | ForBix | https://www.forbix.ir/ |
+
+## Digital banks using their parent's mark
+
+The following digital banks do not have a standalone mark in this asset set;
+the picker uses the parent bank's logo and shows the parent in the subtitle.
+The parent logo files are CC0 (from `zegond/logos-per-banks`) and are reused
+intentionally, not mistakenly attributed.
+
+| Digital bank | Parent | File |
+|---|---|---|
+| Vipad (ویپاد) | بانک پاسارگاد | `pasargad.svg` |
+| Dima (دیما) | بانک ملت | `mellat.svg` |
+| QBank (کیوبانک) | بانک قرض‌الحسنه مهر ایران | `mehr_iran.svg` |
+| ToBank (توبانک) | بانک گردشگری | `gardeshgari.svg` |
+| Baran (باران) | بانک کشاورزی | `keshavarzi.svg` |
+| Bam (بام) | بانک ملی ایران | `melli.svg` |
+| Bajet (باجت) | بانک تجارت | `tejarat.svg` |
+| Sepino (سپینو) | بانک صادرات ایران | `saderat.svg` |
+| MetaBank (متابانک) | مؤسسه اعتباری ملل | `melall.svg` |
+| Bankvareh (بانکواره) | بانک توسعه تعاون | `tosee_taavon.svg` |
+| Fararefah (فرارفاه) | بانک رفاه کارگران | `refah.svg` |
+| FarazBank (فراز بانک) | بانک ایران زمین | `iran_zamin.svg` |
+| RedBank (ردبانک) | بانک شهر | `shahr.svg` |
+| Parsian Man (پارسیان من) | بانک پارسیان | `parsian.svg` |
+| TeamBank (تیم بانک) | بانک صنعت و معدن | `sanat_madan.svg` |
+| Sarmayeh Digital (سرمایه دیجیتال) | بانک سرمایه | `sarmayeh.svg` |
+| Jahesh (جهش بانک) | بانک ایران زمین | `iran_zamin.svg` |
+| ABank (آبانک) | بانک ملی ایران | `melli.svg` |
+| Neon (نئون) | بانک اقتصاد نوین | `eghtesad_novin.svg` |
+
+## No letter placeholders
+
+Every catalog entry except the generic «سایر بانک‌ها» option points to a real
+bank or neobank mark. The generic option intentionally uses the user's custom
+bank name as a monogram because it is not a specific bank. If a standalone
+official mark becomes available for a digital bank above, drop it in this
+directory and change that entry's `logoAsset` in
+`lib/core/constants/iranian_banks.dart`.
