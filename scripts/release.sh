@@ -197,6 +197,29 @@ properties_unescape() {
     printf '%s' "$out"
 }
 
+# keytool's PKCS12 implementation rejects any code point above 0x7f. Check
+# bytes in the C locale so Persian/Arabic digits pasted from another keyboard
+# layout are rejected before keytool runs, regardless of the shell locale.
+password_is_ascii() {
+    local value="$1"
+    local old_lc="${LC_ALL:-}"
+    local i char code
+    export LC_ALL=C
+    for ((i = 0; i < ${#value}; i++)); do
+        char="${value:i:1}"
+        case "$char" in
+            "'") code=39 ;;
+            *) printf -v code '%d' "'$char" 2>/dev/null || code=255 ;;
+        esac
+        if ((code < 32 || code > 126)); then
+            [[ -n "$old_lc" ]] && export LC_ALL="$old_lc" || unset LC_ALL
+            return 1
+        fi
+    done
+    [[ -n "$old_lc" ]] && export LC_ALL="$old_lc" || unset LC_ALL
+    return 0
+}
+
 parse_args() {
     while (($#)); do
         case "$1" in
@@ -403,11 +426,8 @@ generate_keystore() {
         [[ "$store_pass" == "$confirm_pass" ]] || die "Passwords do not match."
     fi
     [[ ${#store_pass} -ge 6 ]] || die "Keystore password must be at least 6 characters."
-    # C locale makes [[:print:]] mean printable ASCII (space through tilde),
-    # including @, #, !, spaces and other symbols. The properties writer
-    # escapes whatever Java needs.
-    if ! printf '%s' "$store_pass" | LC_ALL=C grep -qE '^[[:print:]]+$'; then
-        die "Password may contain printable ASCII characters only (letters, digits, spaces and symbols)."
+    if ! password_is_ascii "$store_pass"; then
+        die "The password contains a non-ASCII character (for example Persian/Arabic digits from a non-English keyboard layout). keytool only accepts ASCII. Switch to an English layout, or use KEYSTORE_PASSWORD='...' with --keygen --non-interactive."
     fi
 
     local dname="$DEFAULT_DNAME"
@@ -448,7 +468,8 @@ generate_keystore() {
         -keypass:env DARAM_STOREPASS \
         -dname "$dname"; then
         unset DARAM_STOREPASS
-        die "keytool failed to generate the keystore."
+        rm -f "$key_path"
+        die "keytool failed. It only accepts ASCII passwords. Switch to an English keyboard layout, or run: KEYSTORE_PASSWORD='your-ascii-password' ./scripts/release.sh --keygen --non-interactive"
     fi
 
     echo

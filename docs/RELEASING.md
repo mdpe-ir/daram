@@ -75,6 +75,12 @@ command-line argument, and is never printed. It is escaped when written to
 `key.properties` and unescaped for validation. A password like `@Ali122` is
 valid. The script prints the SHA-256 certificate fingerprint.
 
+> **Keyboard layout warning:** `keytool` only accepts ASCII characters. Persian
+> or Arabic keyboard layouts can produce non-ASCII digits (۱۲۳ instead of 123)
+> or invisible characters even when the password looks correct. The script now
+> checks the bytes and rejects them with a clear message. Switch to an English
+> layout, or use the non-interactive form with `KEYSTORE_PASSWORD`.
+
 > **Back up the keystore and `key.properties` now.** If you lose them you cannot
 > publish updates to an app users already installed with that signature. Keep a
 > copy in a password manager or an encrypted offline backup. Never commit them.
