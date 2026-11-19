@@ -105,12 +105,12 @@ class AIChatService {
     final allText = StringBuffer();
     final actions = <PendingAction>[];
     final reports = <Map<String, Object?>>[];
-    final seenPayloads = <String>{};
+    final previousCounts = <String, int>{};
 
     for (var round = 0; round < _maxToolRounds; round++) {
       final roundText = StringBuffer();
-      var toolCalls = <ToolCall>[];
-      var failed = false;
+      final toolCalls = <ToolCall>[];
+      String? failure;
 
       await for (final event in provider.streamChat(
         config: config,
@@ -122,14 +122,30 @@ class AIChatService {
             roundText.write(text);
             yield ChatRunText(text);
           case AIStreamToolCalls(:final calls):
-            toolCalls = calls;
+            for (final call in calls) {
+              if (!toolCalls.any((seen) => seen.id == call.id)) {
+                toolCalls.add(call);
+              }
+            }
           case AIStreamError(:final message):
-            yield ChatRunFailed(message);
-            failed = true;
+            failure = message;
+            break;
           case AIStreamDone():
             break;
         }
-        if (failed) return;
+        if (failure != null) break;
+      }
+      if (failure != null) {
+        if (actions.isEmpty && reports.isEmpty) {
+          yield ChatRunFailed(failure);
+        } else {
+          yield ChatRunCompleted(
+            text: 'موارد آماده را بررسی کن. تکمیل پاسخ به مشکل خورد. $failure',
+            actions: actions,
+            reports: reports,
+          );
+        }
+        return;
       }
 
       final roundContent = roundText.toString().trim();
@@ -147,6 +163,7 @@ class AIChatService {
       }
 
       final resultMessages = <AIMessage>[];
+      final roundCounts = <String, int>{};
       for (final call in toolCalls) {
         final execution = await _executor.execute(
           call,
@@ -156,7 +173,12 @@ class AIChatService {
         if (execution.pendingAction != null) {
           final action = execution.pendingAction!;
           final key = '${action.actionType}:${jsonEncode(action.payload)}';
-          if (seenPayloads.add(key)) actions.add(action);
+          final occurrence = roundCounts.update(
+            key,
+            (count) => count + 1,
+            ifAbsent: () => 1,
+          );
+          if (occurrence > (previousCounts[key] ?? 0)) actions.add(action);
         }
         if (execution.report != null) reports.add(execution.report!);
         resultMessages.add(
@@ -168,6 +190,11 @@ class AIChatService {
         );
       }
 
+      for (final entry in roundCounts.entries) {
+        if (entry.value > (previousCounts[entry.key] ?? 0)) {
+          previousCounts[entry.key] = entry.value;
+        }
+      }
       messages
         ..add(AIMessage.assistant(roundContent, toolCalls: toolCalls))
         ..addAll(resultMessages);

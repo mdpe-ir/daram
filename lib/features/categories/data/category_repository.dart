@@ -132,6 +132,18 @@ class CategoryRepository {
     if (trimmed.isEmpty) {
       throw const ValidationException('نام دسته‌بندی را وارد کنید.');
     }
+    final current = await findById(category.id);
+    if (current == null) {
+      throw const NotFoundException('دسته‌بندی پیدا نشد.');
+    }
+    final siblings = await list(type: current.type);
+    if (siblings.any(
+      (item) =>
+          item.id != category.id &&
+          _normalize(item.name) == _normalize(trimmed),
+    )) {
+      throw ValidationException('دسته‌بندی «$trimmed» از قبل وجود دارد.');
+    }
     await (_db.update(
       _db.categories,
     )..where((table) => table.id.equals(category.id))).write(
@@ -157,10 +169,11 @@ class CategoryRepository {
 
     final fallback = siblings.firstWhere(
       (item) =>
+          item.id != id &&
           item.id ==
-          (category.type == CategoryType.expense
-              ? 'cat_other_expense'
-              : 'cat_other_income'),
+              (category.type == CategoryType.expense
+                  ? 'cat_other_expense'
+                  : 'cat_other_income'),
       orElse: () => siblings.firstWhere((item) => item.id != id),
     );
 

@@ -129,7 +129,7 @@ Notes:
 
 1. **Local-only financial data.** SQLite on the device. No account, no registration, no cloud sync, no analytics SDK.
 2. **AI is optional.** Without a configured provider you can still use every local feature: accounts, transactions, transfers, loans, reports, exports and backups.
-3. **No bank integration.** DARAM never asks for full card numbers, CVV, passwords or SMS. Only the last four digits can be stored, and only if the user wants to.
+3. **Optional SMS access on Android.** DARAM reads the inbox on-device after permission. The optional SMS AI switch sends masked financial templates from linked senders and relevant receipt context to the configured provider. OTPs and raw inbox messages stay on the device.
 4. **Explicit consent before writes.** A draft is never a record. Confirmation is always a separate, user-initiated action.
 5. **Auditability.** Every committed operation is recorded in `financial_operations`; safe operations can be reversed.
 
@@ -377,7 +377,7 @@ python3 -m http.server 8080 --directory build/web
 - **iOS is configured but was not built here** (no macOS/Xcode in the environment). Android, Linux and web are verified.
 - **Web-specific limits:** browser AI calls are subject to provider CORS; token streaming is buffered; the API key needs HTTPS or localhost; browser storage is cleared with site data. Use the Android/Linux build when a provider blocks CORS.
 - **Linux-specific limits:** saving the API key requires a running keyring (GNOME Keyring/KWallet); export/import needs `zenity` or `qarma`.
-- **Phase 1 deliberately has no** voice, SMS parsing, bank APIs, cloud sync, accounts/auth, budgets, goals or recurring transactions.
+- **SMS review is Android-only.** In each account, open **انتخاب سرشماره‌ها** and select its senders from the inbox. New messages are checked while the app is running and caught up on reopen. Initial import can include the previous 30 days. Use **بازبینی پیامک‌ها** in chat or Settings to edit, confirm, or dismiss suggestions. The optional AI switch learns unfamiliar templates with your configured provider.
 - **AI quality depends on the chosen model.** Tool-calling models are strongly preferred; JSON mode is a fallback, not an equal experience.
 - **Bank catalog:** names follow public Iranian banking/neobank lists and may lag regulatory mergers. Users can always add a custom bank or neobank. Fifteen digital banks have a bundled standalone mark; the remaining 11 reuse their parent bank's logo. All marks are trademarks used only for identification.
 - **Transfers cannot be edited in place.** They can be deleted (with confirmation); fee rows are protected from direct edits.
@@ -387,18 +387,17 @@ python3 -m http.server 8080 --directory build/web
 - **Local backup is plaintext JSON** (by design, so it is portable). Users are warned to store it safely. SQLCipher/encrypted backup is Phase 2.
 - **PDF Persian shaping** uses `arabic_reshaper` + `bidi`; complex mixed-direction strings may still need manual review.
 - **Chat context** is trimmed to the last 24 messages, and read tools are limited (e.g. 100 transactions per call) to keep requests small.
-- **Schema migrations** start at v1; there is no migration history to exercise yet.
+- **Schema migrations** preserve existing chats and financial records when adding the SMS review tables.
 
 ## 15. Phase 2 roadmap
 
 1. **Encryption at rest** (SQLCipher) and encrypted backups.
 2. **Voice input** with on-device speech, then the same draft pipeline.
-3. **SMS parsing** (with explicit permission) mapped into draft suggestions, never auto-committed.
-4. **Recurring transactions, budgets and goals**, with proactive but quiet insights.
-5. **Cloud sync / multi-device** with end-to-end encryption and conflict-safe ledgers.
-6. **Bank integrations** via licensed open-banking APIs, always user-consented.
-7. **Smarter reports**: cash-flow forecast, category trends, subscription detection.
-8. **Widgets / share sheet / shortcuts**, plus a full iOS release pipeline and Windows/macOS shells.
+3. **Recurring transactions, budgets and goals**, with proactive but quiet insights.
+4. **Cloud sync / multi-device** with end-to-end encryption and conflict-safe ledgers.
+5. **Bank integrations** via licensed open-banking APIs, always user-consented.
+6. **Smarter reports**: cash-flow forecast, category trends, subscription detection.
+7. **Widgets / share sheet / shortcuts**, plus a full iOS release pipeline and Windows/macOS shells.
 
 ## 16. Project structure (top level)
 

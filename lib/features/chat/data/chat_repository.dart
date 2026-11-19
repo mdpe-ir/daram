@@ -214,6 +214,26 @@ class ChatRepository {
     )..where((table) => table.id.equals(id))).go();
   }
 
+  Future<void> addAssistantReply({
+    required String sessionId,
+    required String content,
+    required ChatMessageType type,
+    required Map<String, Object?> metadata,
+    required List<PendingAction> actions,
+  }) => _db.transaction(() async {
+    final message = await addMessage(
+      sessionId: sessionId,
+      role: ChatRole.assistant,
+      content: content,
+      type: type,
+      metadata: metadata,
+    );
+    await addPendingActions([
+      for (final action in actions)
+        action.copyWith(messageId: message.id, sessionId: sessionId),
+    ]);
+  });
+
   Future<void> addPendingActions(List<PendingAction> actions) async {
     if (actions.isEmpty) return;
     await _db.batch((batch) {

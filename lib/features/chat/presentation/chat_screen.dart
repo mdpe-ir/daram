@@ -14,6 +14,8 @@ import '../../../core/domain/enums.dart';
 import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/localization/fa_strings.dart';
 import '../../settings/domain/app_settings.dart';
+import '../../sms/data/sms_inbox.dart';
+import '../../sms/presentation/sms_controller.dart';
 import '../domain/chat_models.dart';
 import 'chat_controller.dart';
 import 'chat_drawer.dart';
@@ -69,6 +71,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (text.isEmpty) return;
     _inputController.clear();
     setState(() {});
+    if (SmsInbox.supported &&
+        RegExp(
+          r'^(?=.*سرشماره)(?=.*(?:تنظیم|انتخاب|پیدا|نشون|نشان|اضافه|وصل|کدوم|کدام)).+$',
+        ).hasMatch(text)) {
+      final sms = ref.read(smsControllerProvider);
+      _focusNode.unfocus();
+      await context.push(sms.enabled ? '/sms/senders' : '/sms');
+      return;
+    }
     _focusNode.requestFocus();
     _scheduleScroll(force: true);
     await ref.read(chatControllerProvider.notifier).send(text);
@@ -90,6 +101,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ref.watch(settingsControllerProvider).value ??
         const AppSettings.defaults();
     final colors = context.daram;
+    final sms = SmsInbox.supported ? ref.watch(smsControllerProvider) : null;
+    final smsCount = sms?.enabled == true
+        ? ref.watch(smsDraftsProvider).value?.length ?? 0
+        : 0;
 
     ref.listen<ChatUiState>(chatControllerProvider, (previous, next) {
       if (previous == null) return;
@@ -144,6 +159,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ],
                   ),
                 ),
+                if (SmsInbox.supported)
+                  IconButton(
+                    tooltip: 'بازبینی پیامک‌ها',
+                    icon: Badge(
+                      isLabelVisible: smsCount > 0,
+                      label: Text(PersianDigits.toPersian('$smsCount')),
+                      child: const Icon(LucideIcons.messageSquare),
+                    ),
+                    onPressed: () => context.push('/sms'),
+                  ),
                 SoftIconButton(
                   icon: LucideIcons.plus,
                   tooltip: FaStrings.newChat,
@@ -170,6 +195,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _ConfigBanner(
                 message: state.configError ?? 'برای شروع گفتگو، کلید API و مدل دستیار را در تنظیمات وارد کن.',
                 onTap: () => context.push('/settings/ai'),
+              ),
+            if (sms != null && sms.candidates.isNotEmpty)
+              ListTile(
+                leading: const Icon(LucideIcons.messageSquare),
+                title: const Text(
+                  'چند سرشمارهٔ بانکی هنوز به حساب‌ها وصل نشده‌اند.',
+                ),
+                trailing: const Icon(LucideIcons.chevronLeft),
+                onTap: () => context.push('/sms/senders'),
               ),
             if (state.error != null)
               _ErrorBanner(
@@ -215,7 +249,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 const SnackBar(content: Text('پیام کپی شد.')),
                               );
                           },
-                          onRegenerate: isLast && !state.streaming
+                          onRegenerate:
+                              isLast && !state.streaming && state.canRegenerate
                               ? () => ref
                                     .read(chatControllerProvider.notifier)
                                     .regenerate()

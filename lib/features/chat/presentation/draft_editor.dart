@@ -112,7 +112,7 @@ class _TransactionEditorState extends ConsumerState<_TransactionEditor> {
       text: _rawAmount(widget.draft.amountRial, _unit),
     );
     _description = TextEditingController(text: widget.draft.description ?? '');
-    _accountId = widget.draft.accountId;
+    _accountId = widget.draft.accountId.isEmpty ? null : widget.draft.accountId;
     _categoryId = widget.draft.categoryId;
     _parsedAmount = widget.draft.amountRial;
   }
@@ -137,7 +137,7 @@ class _TransactionEditorState extends ConsumerState<_TransactionEditor> {
         .toList();
     if (_categoryId != null &&
         !filtered.any((category) => category.id == _categoryId)) {
-      _categoryId = filtered.isEmpty ? null : filtered.first.id;
+      _categoryId = null;
     }
 
     return _BaseEditor(
@@ -148,19 +148,20 @@ class _TransactionEditorState extends ConsumerState<_TransactionEditor> {
           _snack(context, 'مبلغ معتبر وارد کن.');
           return;
         }
-        if (_accountId == null) {
-          _snack(context, 'حساب را انتخاب کن.');
+        final account = accounts
+            .where((item) => item.account.id == _accountId)
+            .firstOrNull;
+        if (account == null) {
+          _snack(context, 'حساب فعال را انتخاب کن.');
           return;
         }
         final draft = widget.draft.copyWith(
           type: _type,
           amountRial: amount,
           accountId: _accountId,
-          accountName: accounts
-              .firstWhere((item) => item.account.id == _accountId)
-              .account
-              .accountName,
+          accountName: account.account.accountName,
           categoryId: _categoryId,
+          clearCategory: _categoryId == null,
           categoryName: filtered
               .where((category) => category.id == _categoryId)
               .map((category) => category.name)
@@ -200,7 +201,10 @@ class _TransactionEditorState extends ConsumerState<_TransactionEditor> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
-            initialValue: _accountId,
+            initialValue: accounts.any((item) => item.account.id == _accountId)
+                ? _accountId
+                : null,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'حساب'),
             items: [
               for (final item in accounts)
@@ -213,9 +217,12 @@ class _TransactionEditorState extends ConsumerState<_TransactionEditor> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
+            key: ValueKey(_type),
             initialValue: _categoryId,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'دسته‌بندی'),
             items: [
+              const DropdownMenuItem(child: Text('بدون دسته‌بندی')),
               for (final category in filtered)
                 DropdownMenuItem(
                   value: category.id,

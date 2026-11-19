@@ -48,6 +48,34 @@ void main() {
 
   final date = CalendarDate(2024, 8, 13);
 
+  test(
+    'deleting fallback category preserves transactions and last category',
+    () async {
+      final account = await seedAccount();
+      await transactions.create(
+        type: TransactionType.expense,
+        amount: Rial.fromToman(100),
+        accountId: account.id,
+        categoryId: 'cat_other_expense',
+        date: date,
+        operationId: 'op-fallback',
+      );
+      await categories.delete('cat_other_expense');
+      final rows = await db.select(db.transactions).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.categoryId, isNot('cat_other_expense'));
+      expect(await categories.findById(rows.single.categoryId), isNotNull);
+      final remaining = await categories.list(type: CategoryType.expense);
+      for (final item in remaining.skip(1)) {
+        await categories.delete(item.id);
+      }
+      await expectLater(
+        categories.delete(remaining.first.id),
+        throwsA(isA<ValidationException>()),
+      );
+    },
+  );
+
   test('creates an account and derives its balance', () async {
     final account = await seedAccount();
     final balances = await accounts.listWithBalances();

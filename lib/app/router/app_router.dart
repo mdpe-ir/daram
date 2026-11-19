@@ -14,6 +14,8 @@ import '../../features/settings/presentation/categories_screen.dart';
 import '../../features/settings/presentation/data_management_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
+import '../../features/sms/presentation/sms_review_screen.dart';
+import '../../features/sms/presentation/sms_sender_conversation.dart';
 import '../app_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -24,6 +26,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     debugLogDiagnostics: false,
     routes: [
+      GoRoute(
+        path: '/sms',
+        builder: (context, state) => const SmsReviewScreen(),
+      ),
+      GoRoute(
+        path: '/sms/senders',
+        builder: (context, state) => const SmsSenderConversation(),
+      ),
       GoRoute(
         path: '/splash',
         pageBuilder: (context, state) =>

@@ -23,6 +23,7 @@ class ToolRegistry {
   final JsonSchemaValidator _validator = const JsonSchemaValidator();
 
   static const List<String> assetPaths = <String>[
+    'assets/ai/tools/manage_category.json',
     'assets/ai/tools/add_account.json',
     'assets/ai/tools/add_transaction.json',
     'assets/ai/tools/add_transfer.json',

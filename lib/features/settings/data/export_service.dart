@@ -64,6 +64,13 @@ class ExportService {
     'chat_messages',
     'pending_actions',
     'financial_operations',
+    ..._smsTables,
+  ];
+
+  static const _smsTables = [
+    'sms_sender_links',
+    'sms_suggestions',
+    'sms_patterns',
   ];
 
   static const Map<String, Set<String>> _allowedColumns = <String, Set<String>>{
@@ -182,6 +189,18 @@ class ExportService {
       'created_at',
       'undone_at',
     },
+    'sms_sender_links': {'sender', 'account_id', 'import_from'},
+    'sms_suggestions': {
+      'id',
+      'sender',
+      'received_at',
+      'template',
+      'context_key',
+      'context_message_id',
+      'payload',
+      'status',
+    },
+    'sms_patterns': {'key', 'rule'},
   };
 
   /// CSV of all transactions in [range], with a BOM so Excel reads Persian.
@@ -573,11 +592,14 @@ class ExportService {
 
   /// Full JSON backup of every table, with raw storage values.
   Future<Uint8List> backupJson() async {
-    final tables = <String, List<Map<String, dynamic>>>{};
-    for (final table in tableOrder) {
-      final rows = await _db.customSelect('SELECT * FROM $table').get();
-      tables[table] = rows.map((row) => row.data).toList();
-    }
+    final tables = await _db.transaction(() async {
+      final data = <String, List<Map<String, dynamic>>>{};
+      for (final table in tableOrder) {
+        final rows = await _db.customSelect('SELECT * FROM $table').get();
+        data[table] = rows.map((row) => row.data).toList();
+      }
+      return data;
+    });
     final payload = {
       'format': backupFormat,
       'version': backupVersion,
@@ -615,7 +637,8 @@ class ExportService {
 
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in tableOrder) {
-      final raw = rawTables[table];
+      final raw =
+          rawTables[table] ?? (_smsTables.contains(table) ? const [] : null);
       if (raw is! List) {
         throw ValidationException('جدول «$table» در فایل پشتیبان نیست.');
       }
@@ -667,6 +690,7 @@ class ExportService {
       }
     });
 
+    _db.markTablesUpdated(_db.allTables);
     return BackupSummary(
       exportedAt: DateTime.tryParse('${decoded['exported_at'] ?? ''}'),
       rowCounts: {

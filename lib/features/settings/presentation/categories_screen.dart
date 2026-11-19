@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_providers.dart';
 import '../../../app/design_system/daram_widgets.dart';
 import '../../../app/theme/daram_colors.dart';
+import '../../../core/constants/category_icons.dart';
 import '../../../core/domain/enums.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../categories/domain/category.dart';
@@ -38,10 +39,10 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
           icon: const Icon(LucideIcons.arrowRight, size: 20),
         ),
         actions: [
-          IconButton(
+          TextButton.icon(
             onPressed: () => _showEditor(context),
             icon: const Icon(LucideIcons.plus, size: 20),
-            tooltip: 'دسته جدید',
+            label: const Text('دسته جدید'),
           ),
         ],
       ),
@@ -119,6 +120,12 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
                                 ),
                               ),
                               IconButton(
+                                onPressed: () =>
+                                    _showEditor(context, category: category),
+                                icon: const Icon(LucideIcons.pencil, size: 17),
+                                tooltip: 'ویرایش',
+                              ),
+                              IconButton(
                                 visualDensity: VisualDensity.compact,
                                 onPressed: () => _delete(category),
                                 icon: Icon(
@@ -146,7 +153,7 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
       builder: (context) => AlertDialog(
         title: const Text('حذف دسته‌بندی'),
         content: Text(
-          'دسته «${category.name}» حذف شود؟ تراکنش‌های مرتبط به دسته «سایر» منتقل می‌شوند.',
+          'دسته «${category.name}» حذف شود؟ تراکنش‌های مرتبط حذف نمی‌شوند و به یک دسته دیگر از همین نوع (ترجیحاً «سایر») منتقل می‌شوند.',
         ),
         actions: [
           TextButton(
@@ -205,29 +212,6 @@ class _CategoryEditorSheetState extends ConsumerState<_CategoryEditorSheet> {
   );
   late String _icon = widget.category?.icon ?? 'circle-ellipsis';
   late String _color = widget.category?.colorHex ?? '#6366F1';
-  final List<String> _icons = const [
-    'utensils',
-    'bus',
-    'shopping-bag',
-    'shirt',
-    'house',
-    'receipt-text',
-    'heart-pulse',
-    'gamepad-2',
-    'graduation-cap',
-    'repeat-2',
-    'plane',
-    'circle-ellipsis',
-    'briefcase',
-    'laptop',
-    'trending-up',
-    'gift',
-    'tag',
-    'circle-plus',
-    'wallet',
-    'landmark',
-    'coins',
-  ];
   final List<String> _colors = const [
     '#F97316',
     '#3B82F6',
@@ -267,26 +251,40 @@ class _CategoryEditorSheetState extends ConsumerState<_CategoryEditorSheet> {
             decoration: const InputDecoration(labelText: 'نام دسته‌بندی'),
           ),
           const SizedBox(height: 16),
-          Text('آیکون', style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              for (final icon in _icons)
-                InkWell(
+              Text('آیکون', style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(width: 6),
+              Text(
+                '${categoryIconSlugs.length} گزینه',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: colors.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 168,
+            child: GridView.builder(
+              padding: EdgeInsets.zero,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 44,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: categoryIconSlugs.length,
+              itemBuilder: (context, index) {
+                final icon = categoryIconSlugs[index];
+                final selected = _icon == icon;
+                return InkWell(
                   onTap: () => setState(() => _icon = icon),
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
-                    width: 40,
-                    height: 40,
                     decoration: BoxDecoration(
-                      color: _icon == icon
-                          ? colors.accentSoft
-                          : colors.surfaceMuted,
+                      color: selected ? colors.accentSoft : colors.surfaceMuted,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: _icon == icon
+                        color: selected
                             ? colors.accent.withValues(alpha: 0.5)
                             : colors.border,
                       ),
@@ -294,13 +292,12 @@ class _CategoryEditorSheetState extends ConsumerState<_CategoryEditorSheet> {
                     child: Icon(
                       categoryIcon(icon),
                       size: 18,
-                      color: _icon == icon
-                          ? colors.accent
-                          : colors.textSecondary,
+                      color: selected ? colors.accent : colors.textSecondary,
                     ),
                   ),
-                ),
-            ],
+                );
+              },
+            ),
           ),
           const SizedBox(height: 16),
           Text('رنگ', style: Theme.of(context).textTheme.labelMedium),

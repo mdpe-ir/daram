@@ -4,6 +4,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/app_providers.dart';
+import '../../sms/data/sms_inbox.dart';
+import '../../sms/presentation/sms_sender_picker.dart';
 import '../../../app/design_system/bank_picker.dart';
 import '../../../app/design_system/daram_inputs.dart';
 import '../../../app/design_system/daram_widgets.dart';
@@ -319,6 +321,14 @@ class _AccountDetailsSheet extends ConsumerWidget {
               ],
             ),
           ),
+          if (SmsInbox.supported && !account.account.isArchived)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(LucideIcons.messageSquare),
+              title: const Text('انتخاب سرشماره‌ها'),
+              trailing: const Icon(LucideIcons.chevronLeft),
+              onTap: () => showSmsSenderPicker(context, account.account),
+            ),
           const SizedBox(height: 16),
           Text(
             'آخرین تراکنش‌ها',

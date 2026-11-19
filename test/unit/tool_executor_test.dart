@@ -63,6 +63,99 @@ void main() {
         defaultCurrency: CurrencyUnit.toman,
       );
 
+  test(
+    'agent manages categories immediately and rejects duplicate rename',
+    () async {
+      final created = await run('manage_category', {
+        'action': 'create',
+        'type': 'expense',
+        'name': 'تست دسته',
+        'icon': 'coffee',
+        'color_hex': '#22c55e',
+      });
+      expect(created.ok, isTrue);
+      expect(created.pendingAction, isNull);
+      final content = jsonDecode(created.content) as Map;
+      expect(content['icon'], 'coffee');
+      expect(content['color_hex'], '#22C55E');
+      final id = content['category_id'];
+      final renamed = await run('manage_category', {
+        'action': 'rename',
+        'type': 'expense',
+        'category_id': id,
+        'name': 'نام تازه',
+        'icon': 'pizza',
+      });
+      expect(renamed.ok, isTrue);
+      final stored = (await CategoryRepository(db).findById(id as String))!;
+      expect(stored.name, 'نام تازه');
+      expect(stored.icon, 'pizza');
+      expect(stored.colorHex, '#22C55E');
+      final duplicate = await run('manage_category', {
+        'action': 'rename',
+        'type': 'expense',
+        'category_id': id,
+        'name': 'خوراک و رستوران',
+      });
+      expect(duplicate.ok, isFalse);
+      final wrongType = await run('manage_category', {
+        'action': 'delete',
+        'type': 'income',
+        'category_id': id,
+      });
+      expect(wrongType.ok, isFalse);
+      final deleted = await run('manage_category', {
+        'action': 'delete',
+        'type': 'expense',
+        'category_id': id,
+      });
+      expect(deleted.ok, isTrue);
+      expect(await CategoryRepository(db).findById(id), isNull);
+    },
+  );
+
+  test('category management rejects missing fields and unknown ids', () async {
+    for (final args in <Map<String, Object?>>[
+      {'action': 'create', 'type': 'expense'},
+      {
+        'action': 'rename',
+        'type': 'expense',
+        'category_id': 'missing',
+        'name': 'نام',
+      },
+      {'action': 'delete', 'type': 'expense'},
+    ]) {
+      expect((await run('manage_category', args)).ok, isFalse);
+    }
+  });
+
+  test(
+    'category management rejects an unknown icon and a bad colour',
+    () async {
+      final unknownIcon = await run('manage_category', {
+        'action': 'create',
+        'type': 'expense',
+        'name': 'آیکون ناموجود',
+        'icon': 'rocket-ship',
+      });
+      expect(unknownIcon.ok, isFalse);
+      expect(unknownIcon.content, contains('آیکون'));
+
+      final badColor = await run('manage_category', {
+        'action': 'create',
+        'type': 'expense',
+        'name': 'رنگ ناموجود',
+        'color_hex': 'green',
+      });
+      expect(badColor.ok, isFalse);
+      expect(
+        (await CategoryRepository(db).list(type: CategoryType.expense))
+            .any((item) => item.name == 'آیکون ناموجود'),
+        isFalse,
+      );
+    },
+  );
+
   test('add_transaction creates a validated pending draft only', () async {
     final result = await run('add_transaction', {
       'type': 'expense',
@@ -155,6 +248,45 @@ void main() {
     expect(totals['expense_rial'], 2000000);
     expect(totals['count'], 1);
   });
+
+  test(
+    'query returns exact display amounts for 20500 toman in either unit',
+    () async {
+      final transactions = TransactionRepository(db, OperationRepository(db));
+      await transactions.create(
+        type: TransactionType.expense,
+        amount: Rial.fromToman(20500),
+        accountId: (await accounts.list()).first.id,
+        categoryId: 'cat_food',
+        date: CalendarDate(2026, 11, 6),
+        operationId: 'op-20500',
+      );
+      for (final unit in CurrencyUnit.values) {
+        final result = await executor.execute(
+          ToolCall(
+            id: 'last-transaction',
+            name: 'query_transactions',
+            arguments: {
+              'date_range': {'start': '2026-11-01', 'end': '2026-11-30'},
+              'limit': 1,
+            },
+          ),
+          sessionId: 'session-1',
+          defaultCurrency: unit,
+        );
+        expect(result.ok, isTrue);
+        final content = jsonDecode(result.content) as Map;
+        final item = (content['items'] as List).single as Map;
+        final display = unit == CurrencyUnit.toman
+            ? '۲۰,۵۰۰ تومان'
+            : '۲۰۵,۰۰۰ ریال';
+        expect(content['display_currency'], unit.name);
+        expect(item['amount_rial'], 205000);
+        expect(item['amount_display'], display);
+        expect((content['totals'] as Map)['expense_display'], display);
+      }
+    },
+  );
 
   test('generate_report attaches a serialised report', () async {
     final result = await run('generate_report', {

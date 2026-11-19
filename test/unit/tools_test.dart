@@ -15,7 +15,7 @@ void main() {
   group('ToolRegistry', () {
     test('loads all bundled schemas from assets', () async {
       final registry = await ToolRegistry.load(rootBundle);
-      expect(registry.definitions, hasLength(7));
+      expect(registry.definitions, hasLength(DaramTool.values.length));
       for (final tool in DaramTool.values) {
         expect(
           registry.byName(tool.toolName),

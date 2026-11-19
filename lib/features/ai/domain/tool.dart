@@ -5,6 +5,7 @@ import 'dart:convert';
 /// The identifiers are part of the prompt/tool contract and match the JSON
 /// schema files in `assets/ai/tools/`.
 enum DaramTool {
+  manageCategory('manage_category'),
   addAccount('add_account'),
   addTransaction('add_transaction'),
   addTransfer('add_transfer'),
@@ -31,7 +32,9 @@ enum DaramTool {
     DaramTool.addTransfer ||
     DaramTool.addLoan ||
     DaramTool.markInstallmentPaid => true,
-    DaramTool.queryTransactions || DaramTool.generateReport => false,
+    DaramTool.manageCategory ||
+    DaramTool.queryTransactions ||
+    DaramTool.generateReport => false,
   };
 }
 

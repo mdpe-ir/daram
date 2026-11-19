@@ -1,0 +1,24 @@
+{
+  "name": "manage_category",
+  "description": "مدیریت مستقل دسته‌بندی‌ها: ساخت، تغییر نام، تغییر آیکون/رنگ یا حذف دسته هزینه/درآمد به تشخیص خودت. مستقیم اجرا می‌شود و پیش‌نویس مالی نمی‌سازد. این ابزار را وقتی کاربر می‌گوید «دسته بساز» یا «دسته را حذف/تغییر نام بده» حتماً صدا بزن؛ هرگز نگو نمی‌توانی. حذف دسته تراکنش‌ها را حذف نمی‌کند و آن‌ها را به دسته جایگزین همان نوع منتقل می‌کند. برای تغییر نام، آیکون و حذف فقط شناسه دقیق دسته را بده؛ دسته مشابه را حدس نزن.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {"type": "string", "enum": ["create", "rename", "delete"]},
+      "type": {"type": "string", "enum": ["expense", "income"]},
+      "category_id": {"type": "string", "description": "شناسه دقیق دسته برای rename و delete"},
+      "name": {"type": "string", "description": "نام جدید؛ برای create و rename الزامی است"},
+      "icon": {
+        "type": "string",
+        "description": "اسلاگ آیکون از فهرست آیکون‌های مجاز در بخش زمینه؛ مثلاً «car»، «coffee» یا «dumbbell». اختیاری برای create و rename."
+      },
+      "color_hex": {
+        "type": "string",
+        "pattern": "^#[0-9A-Fa-f]{6}$",
+        "description": "رنگ دسته به شکل #RRGGBB؛ اختیاری. اگر نگویی برنامه یک رنگ مناسب انتخاب می‌کند."
+      }
+    },
+    "required": ["action", "type"],
+    "additionalProperties": false
+  }
+}

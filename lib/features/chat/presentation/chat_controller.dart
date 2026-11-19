@@ -46,6 +46,20 @@ class ChatUiState {
     (actions) => actions.any((action) => action.isPending),
   );
 
+  bool get canRegenerate {
+    final lastUser = messages.lastIndexWhere((message) => message.isUser);
+    return lastUser >= 0 &&
+        messages
+            .skip(lastUser + 1)
+            .every(
+              (message) =>
+                  message.type != ChatMessageType.confirmation &&
+                  actionsFor(message.id).every(
+                    (action) => action.status != PendingActionStatus.confirmed,
+                  ),
+            );
+  }
+
   List<ChatSession> get filteredSessions {
     final query = searchQuery.trim().toLowerCase();
     if (query.isEmpty) return sessions;
@@ -243,7 +257,7 @@ class ChatController extends Notifier<ChatUiState> {
 
   /// Regenerates the last assistant answer using the same user message.
   Future<void> regenerate() async {
-    if (state.streaming) return;
+    if (state.streaming || !state.canRegenerate) return;
     final messages = state.messages;
     final lastUserIndex = messages.lastIndexWhere((message) => message.isUser);
     if (lastUserIndex == -1) return;
@@ -316,6 +330,7 @@ class ChatController extends Notifier<ChatUiState> {
 
     try {
       final promptBuilder = await ref.read(promptBuilderProvider.future);
+      final toolRegistry = await ref.read(toolRegistryProvider.future);
       final service = await ref.read(aiChatServiceProvider.future);
       final accounts = await ref
           .read(accountRepositoryProvider)
@@ -329,6 +344,7 @@ class ChatController extends Notifier<ChatUiState> {
           accounts: accounts,
           categories: categories,
           loans: loans,
+          tools: toolRegistry.definitions,
           toolMode: settings.aiConfig.toolMode,
         ),
       );
@@ -394,9 +410,9 @@ class ChatController extends Notifier<ChatUiState> {
         : 'پاسخی دریافت نشد. یک بار دیگر تلاش کن.';
 
     try {
-      final message = await _chat.addMessage(
+      await _chat.addAssistantReply(
         sessionId: sessionId,
-        role: ChatRole.assistant,
+        actions: actions,
         content: content,
         type: actions.isNotEmpty
             ? ChatMessageType.draft
@@ -409,12 +425,6 @@ class ChatController extends Notifier<ChatUiState> {
           if (reports.isNotEmpty) 'reports': reports,
         },
       );
-      if (actions.isNotEmpty) {
-        await _chat.addPendingActions([
-          for (final action in actions)
-            action.copyWith(messageId: message.id, sessionId: sessionId),
-        ]);
-      }
       state = state.copyWith(streaming: false, streamingText: '');
       await _loadSession(sessionId);
       await _reloadSessions();
@@ -462,17 +472,17 @@ class ChatController extends Notifier<ChatUiState> {
           .read(confirmationServiceProvider)
           .confirm(actionId, payload: payload);
       final action = await _chat.findPendingAction(actionId);
-      final draft = action == null
-          ? null
-          : FinancialDraft.fromPendingAction(action);
-      final summary = draft?.title ?? 'عملیات مالی';
-      await _chat.addMessage(
-        sessionId: state.activeSession!.id,
-        role: ChatRole.assistant,
-        content: 'ثبت شد: $summary',
-        type: ChatMessageType.confirmation,
-        metadata: {'operationId': operationId, 'summary': summary},
-      );
+      if (action != null) {
+        final draft = FinancialDraft.fromPendingAction(action);
+        final summary = draft?.title ?? 'عملیات مالی';
+        await _chat.addMessage(
+          sessionId: action.sessionId,
+          role: ChatRole.assistant,
+          content: 'ثبت شد: $summary',
+          type: ChatMessageType.confirmation,
+          metadata: {'operationId': operationId, 'summary': summary},
+        );
+      }
       await _refreshActive();
       return operationId;
     } on AppException catch (error) {

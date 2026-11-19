@@ -8,6 +8,7 @@ import 'database_platform_web.dart'
 import '../../core/domain/enums.dart';
 import 'tables/chat_tables.dart';
 import 'tables/financial_tables.dart';
+import 'tables/sms_tables.dart';
 
 part 'app_database.g.dart';
 
@@ -29,6 +30,9 @@ part 'app_database.g.dart';
     ChatMessages,
     PendingActions,
     FinancialOperations,
+    SmsSenderLinks,
+    SmsSuggestions,
+    SmsPatterns,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -61,7 +65,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.memory() => AppDatabase(createMemoryExecutor());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -71,6 +75,11 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.addColumn(chatMessages, chatMessages.sequence);
+      }
+      if (from < 3) {
+        await migrator.createTable(smsSenderLinks);
+        await migrator.createTable(smsSuggestions);
+        await migrator.createTable(smsPatterns);
       }
     },
     beforeOpen: (details) async {

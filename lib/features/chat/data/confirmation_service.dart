@@ -43,6 +43,21 @@ class ConfirmationService {
     String actionId, {
     Map<String, Object?>? payload,
   }) async {
+    try {
+      return await _db.transaction(() => _confirm(actionId, payload));
+    } on AppException catch (error) {
+      await _recordError(actionId, payload, error.message);
+      rethrow;
+    } on Object {
+      await _recordError(actionId, payload, 'ثبت این پیش‌نویس ممکن نشد.');
+      rethrow;
+    }
+  }
+
+  Future<String> _confirm(
+    String actionId,
+    Map<String, Object?>? payload,
+  ) async {
     final action = await _chat.findPendingAction(actionId);
     if (action == null) throw const NotFoundException('پیش‌نویس پیدا نشد.');
     if (!action.isPending) {
@@ -52,94 +67,94 @@ class ConfirmationService {
     }
     final effectivePayload = payload ?? action.payload;
 
-    try {
-      switch (DaramTool.fromName(action.actionType)) {
-        case DaramTool.addAccount:
-          final draft = AccountDraft.fromPayload(effectivePayload);
-          await _accounts.create(
-            bankId: draft.bankId,
-            bankName: draft.bankName,
-            accountName: draft.accountName,
-            accountType: draft.accountType,
-            initialBalance: draft.initialBalanceRial,
-            cardLastFour: draft.cardLastFour,
-            description: draft.description,
-            operationId: action.operationId,
-          );
-        case DaramTool.addTransaction:
-          final draft = TransactionDraft.fromPayload(effectivePayload);
-          await _transactions.create(
-            type: draft.type,
-            amount: draft.amountRial,
-            accountId: draft.accountId,
-            categoryId: draft.categoryId,
-            date: draft.date,
-            description: draft.description,
-            operationId: action.operationId,
-          );
-        case DaramTool.addTransfer:
-          final draft = TransferDraft.fromPayload(effectivePayload);
-          await _transfers.create(
-            sourceAccountId: draft.sourceAccountId,
-            destinationAccountId: draft.destinationAccountId,
-            amount: draft.amountRial,
-            fee: draft.feeRial,
-            date: draft.date,
-            description: draft.description,
-            operationId: action.operationId,
-          );
-        case DaramTool.addLoan:
-          final draft = LoanDraft.fromPayload(effectivePayload);
-          await _loans.create(
-            title: draft.loanTitle,
-            principal: draft.principalRial,
-            interest: draft.interestRial,
-            installmentCount: draft.installmentCount,
-            accountId: draft.accountId,
-            startDate: draft.startDate,
-            dueDates: draft.dueDates,
-            expectedInstallmentAmount: draft.installmentAmountRial,
-            description: draft.description,
-            operationId: action.operationId,
-          );
-        case DaramTool.markInstallmentPaid:
-          final draft = InstallmentPaymentDraft.fromPayload(effectivePayload);
-          await _loans.markInstallmentPaid(
-            loanId: draft.loanId,
-            installmentId: draft.installmentId,
-            paymentDate: draft.paymentDate,
-            paidAmount: draft.paidAmountRial,
-            operationId: action.operationId,
-          );
-        case DaramTool.queryTransactions || DaramTool.generateReport || null:
-          throw const ValidationException('این پیش‌نویس قابل تأیید نیست.');
-      }
-
-      await _chat.updatePendingAction(
-        action.copyWith(
-          payload: effectivePayload,
-          status: PendingActionStatus.confirmed,
-          resolvedAt: DateTime.now().toUtc(),
-        ),
-      );
-      return action.operationId;
-    } on AppException catch (error) {
-      await _chat.updatePendingAction(
-        action.copyWith(payload: effectivePayload, errorMessage: error.message),
-      );
-      rethrow;
-    } on Object {
-      await _chat.updatePendingAction(
-        action.copyWith(
-          payload: effectivePayload,
-          errorMessage: 'ثبت این پیش‌نویس ممکن نشد.',
-        ),
-      );
-      rethrow;
+    switch (DaramTool.fromName(action.actionType)) {
+      case DaramTool.addAccount:
+        final draft = AccountDraft.fromPayload(effectivePayload);
+        await _accounts.create(
+          bankId: draft.bankId,
+          bankName: draft.bankName,
+          accountName: draft.accountName,
+          accountType: draft.accountType,
+          initialBalance: draft.initialBalanceRial,
+          cardLastFour: draft.cardLastFour,
+          description: draft.description,
+          operationId: action.operationId,
+        );
+      case DaramTool.addTransaction:
+        final draft = TransactionDraft.fromPayload(effectivePayload);
+        await _transactions.create(
+          type: draft.type,
+          amount: draft.amountRial,
+          accountId: draft.accountId,
+          categoryId: draft.categoryId,
+          date: draft.date,
+          description: draft.description,
+          operationId: action.operationId,
+        );
+      case DaramTool.addTransfer:
+        final draft = TransferDraft.fromPayload(effectivePayload);
+        await _transfers.create(
+          sourceAccountId: draft.sourceAccountId,
+          destinationAccountId: draft.destinationAccountId,
+          amount: draft.amountRial,
+          fee: draft.feeRial,
+          date: draft.date,
+          description: draft.description,
+          operationId: action.operationId,
+        );
+      case DaramTool.addLoan:
+        final draft = LoanDraft.fromPayload(effectivePayload);
+        await _loans.create(
+          title: draft.loanTitle,
+          principal: draft.principalRial,
+          interest: draft.interestRial,
+          installmentCount: draft.installmentCount,
+          accountId: draft.accountId,
+          startDate: draft.startDate,
+          dueDates: draft.dueDates,
+          expectedInstallmentAmount: draft.installmentAmountRial,
+          description: draft.description,
+          operationId: action.operationId,
+        );
+      case DaramTool.markInstallmentPaid:
+        final draft = InstallmentPaymentDraft.fromPayload(effectivePayload);
+        await _loans.markInstallmentPaid(
+          loanId: draft.loanId,
+          installmentId: draft.installmentId,
+          paymentDate: draft.paymentDate,
+          paidAmount: draft.paidAmountRial,
+          operationId: action.operationId,
+        );
+      case DaramTool.manageCategory ||
+          DaramTool.queryTransactions ||
+          DaramTool.generateReport ||
+          null:
+        throw const ValidationException('این پیش‌نویس قابل تأیید نیست.');
     }
+
+    await _chat.updatePendingAction(
+      action.copyWith(
+        payload: effectivePayload,
+        status: PendingActionStatus.confirmed,
+        resolvedAt: DateTime.now().toUtc(),
+      ),
+    );
+    return action.operationId;
   }
 
-  Future<void> reject(String actionId) async {
+  Future<void> _recordError(
+    String actionId,
+    Map<String, Object?>? payload,
+    String message,
+  ) => _db.transaction(() async {
+    final current = await _chat.findPendingAction(actionId);
+    if (current == null || !current.isPending) return;
+    await _chat.updatePendingAction(
+      current.copyWith(payload: payload, errorMessage: message),
+    );
+  });
+
+  Future<void> reject(String actionId) => _db.transaction(() async {
     final action = await _chat.findPendingAction(actionId);
     if (action == null) throw const NotFoundException('پیش‌نویس پیدا نشد.');
     if (!action.isPending) return;
@@ -149,7 +164,7 @@ class ConfirmationService {
         resolvedAt: DateTime.now().toUtc(),
       ),
     );
-  }
+  });
 
   /// Rejects every still-pending draft attached to [messageId].
   Future<void> rejectAllForMessage(String messageId) async {

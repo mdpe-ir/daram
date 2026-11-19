@@ -13,6 +13,7 @@ import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/formatting/bidi_text.dart';
 import '../../../core/money/currency.dart';
 import '../../settings/domain/app_settings.dart';
+import '../../sms/data/sms_inbox.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -188,6 +189,15 @@ class SettingsScreen extends ConsumerWidget {
                     onTap: () => context.push('/settings/categories'),
                     showDivider: true,
                   ),
+                  if (SmsInbox.supported)
+                    _SettingsTile(
+                      icon: LucideIcons.messageSquare,
+                      color: colors.transfer,
+                      title: 'پیامک‌های بانکی',
+                      subtitle: 'دسترسی پیامک و بازبینی پیشنهادها',
+                      onTap: () => context.push('/sms'),
+                      showDivider: true,
+                    ),
                   _SettingsTile(
                     icon: LucideIcons.database,
                     color: colors.warning,

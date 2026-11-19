@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/category_icons.dart';
 import '../../../core/constants/iranian_banks.dart';
 import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/currency.dart';
@@ -21,6 +22,7 @@ class PromptContext {
     required this.accounts,
     required this.categories,
     required this.loans,
+    this.tools = const <ToolDefinition>[],
     this.toolMode = AIToolMode.native,
   });
 
@@ -29,6 +31,10 @@ class PromptContext {
   final List<AccountWithBalance> accounts;
   final List<Category> categories;
   final List<Loan> loans;
+
+  /// Bundled tool definitions, so the model knows every tool by name even when
+  /// the provider does not support native tool calling.
+  final List<ToolDefinition> tools;
   final AIToolMode toolMode;
 }
 
@@ -109,7 +115,12 @@ class PromptBuilder {
               'اگر اطلاعات لازم کامل نیست، ابزار را صدا نزن و سؤال کن.'
         : 'تو به function calling دسترسی نداری. برای هر پاسخ، فقط و فقط یک شیء JSON معتبر برگردان با این ساختار: '
               '{"message": "متن پاسخ فارسی برای کاربر", "actions": [{"tool": "add_transaction", "arguments": {...}}]}. '
+              'نام ابزار را فقط از فهرست «ابزارهای در دسترس» بردار و آرگومان‌ها را دقیقاً با همان ابزار پر کن. '
               'اگر عملیات مالی لازم نیست، آرایه actions خالی باشد. هیچ متن، توضیح یا ``` پیش از JSON نگذار.';
+
+    final toolsText = context.tools.isEmpty
+        ? '  (فهرست ابزارها در دسترس نیست.)'
+        : context.tools.map(_formatTool).join('\n');
 
     final examplesText = examples.isEmpty
         ? '  (نمونه‌ای بارگذاری نشده است.)'
@@ -132,6 +143,8 @@ class PromptBuilder {
       '{{categories}}': categories,
       '{{loans}}': loans,
       '{{tool_mode_instructions}}': toolModeInstructions,
+      '{{tools}}': toolsText,
+      '{{category_icons}}': categoryIconSlugs.join('، '),
       '{{examples}}': examplesText,
     };
 
@@ -140,6 +153,13 @@ class PromptBuilder {
       prompt = prompt.replaceAll(entry.key, entry.value);
     }
     return prompt;
+  }
+
+  String _formatTool(ToolDefinition tool) {
+    final parameters = tool.parameters['properties'];
+    if (parameters is! Map) return '  - ${tool.name}: ${tool.description}';
+    final fields = parameters.keys.map((key) => '$key').join('، ');
+    return '  - ${tool.name}: ${tool.description}\n    آرگومان‌ها: $fields';
   }
 
   String _formatExample(Map<String, Object?> example) {

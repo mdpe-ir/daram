@@ -25,6 +25,29 @@ class SettingsRepository {
   static const _toolModeKey = 'ai.tool_mode';
   static const _maxTokensKey = 'ai.max_tokens';
 
+  bool get smsAiEnabled => _prefs.getBool('sms.ai_enabled') ?? false;
+
+  Future<void> setSmsAiEnabled(bool enabled) async {
+    await _prefs.setBool('sms.ai_enabled', enabled);
+  }
+
+  bool get smsEnabled => _prefs.getBool('sms.enabled') ?? false;
+
+  Future<void> setSmsEnabled(bool enabled) async {
+    await _prefs.setBool('sms.enabled', enabled);
+  }
+
+  DateTime? get smsLastScan {
+    final value = _prefs.getInt('sms.last_scan');
+    return value == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+  }
+
+  Future<void> setSmsLastScan(DateTime date) async {
+    await _prefs.setInt('sms.last_scan', date.millisecondsSinceEpoch);
+  }
+
   Future<AppSettings> load() async {
     final apiKey = await _keys.read() ?? '';
     final provider = AIProviderKind.fromStorage(

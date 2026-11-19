@@ -5,13 +5,40 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/localization/fa_strings.dart';
 import '../features/settings/domain/app_settings.dart';
+import '../features/sms/data/sms_inbox.dart';
+import '../features/sms/presentation/sms_controller.dart';
 import 'app_providers.dart';
 import 'design_system/daram_widgets.dart';
 import 'router/app_router.dart';
 import 'theme/daram_theme.dart';
 
-class DaramApp extends ConsumerWidget {
+class DaramApp extends ConsumerStatefulWidget {
   const DaramApp({super.key});
+
+  @override
+  ConsumerState<DaramApp> createState() => _DaramAppState();
+}
+
+class _DaramAppState extends ConsumerState<DaramApp> {
+  AppLifecycleListener? _smsLifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!SmsInbox.supported) return;
+    _smsLifecycle = AppLifecycleListener(onResume: _refreshSms);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshSms());
+  }
+
+  void _refreshSms() {
+    if (mounted) ref.read(smsControllerProvider.notifier).refresh();
+  }
+
+  @override
+  void dispose() {
+    _smsLifecycle?.dispose();
+    super.dispose();
+  }
 
   static bool get _desktopPlatform =>
       kIsWeb ||
@@ -20,8 +47,21 @@ class DaramApp extends ConsumerWidget {
       defaultTargetPlatform == TargetPlatform.windows;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsControllerProvider);
+    if (SmsInbox.supported) {
+      ref.listen(settingsControllerProvider, (previous, next) {
+        final before = previous?.value?.aiConfig;
+        final after = next.value?.aiConfig;
+        if (after?.isConfigured == true &&
+            (before?.apiKey != after!.apiKey ||
+                before?.provider != after.provider ||
+                before?.model != after.model ||
+                before?.baseUrl != after.baseUrl)) {
+          _refreshSms();
+        }
+      });
+    }
     final value = settings.value ?? const AppSettings.defaults();
     final format = DaramFormat(
       unit: value.currencyUnit,

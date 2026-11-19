@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/constants/category_icons.dart';
 import '../../../core/constants/iranian_banks.dart';
 import '../../../core/domain/enums.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/currency.dart';
 import '../../../core/money/rial.dart';
 import '../../../core/time/calendar_date.dart';
@@ -102,6 +104,7 @@ class ToolExecutor {
 
     try {
       return await switch (DaramTool.fromName(call.name)) {
+        DaramTool.manageCategory => _manageCategory(call),
         DaramTool.addAccount => _addAccount(call, sessionId, defaultCurrency),
         DaramTool.addTransaction => _addTransaction(
           call,
@@ -115,7 +118,10 @@ class ToolExecutor {
           sessionId,
           defaultCurrency,
         ),
-        DaramTool.queryTransactions => _queryTransactions(call),
+        DaramTool.queryTransactions => _queryTransactions(
+          call,
+          defaultCurrency,
+        ),
         DaramTool.generateReport => _generateReport(call),
         null => _error(call, 'ابزار «${call.name}» شناخته نشد.'),
       };
@@ -131,6 +137,89 @@ class ToolExecutor {
         'پردازش این درخواست ممکن نشد. لطفاً اطلاعات را دقیق‌تر بگو.',
       );
     }
+  }
+
+  Future<ToolExecution> _manageCategory(ToolCall call) async {
+    final args = call.arguments;
+    final type = args['type'] == 'income'
+        ? CategoryType.income
+        : CategoryType.expense;
+    final action = args['action'] as String;
+    final icon = _categoryIconSlug(args['icon']);
+    final colorHex = _categoryColor(args['color_hex']);
+    Category? category;
+    if (action == 'create') {
+      category = await _categories.create(
+        name: _parser.requireString(args['name'], field: 'نام دسته‌بندی'),
+        type: type,
+        icon: icon ?? 'tag',
+        colorHex: colorHex ?? '#8B5CF6',
+      );
+    } else {
+      final id = _parser.requireString(
+        args['category_id'],
+        field: 'شناسه دسته‌بندی',
+      );
+      category = await _categories.findById(id);
+      if (category == null || category.type != type) {
+        throw const ValidationException(
+          'دسته‌بندی با این شناسه و نوع پیدا نشد.',
+        );
+      }
+      if (action == 'rename') {
+        category = category.copyWith(
+          name: _parser.requireString(args['name'], field: 'نام دسته‌بندی'),
+          icon: icon,
+          colorHex: colorHex,
+        );
+        await _categories.update(category);
+      } else {
+        await _categories.delete(category.id);
+      }
+    }
+    final categories = await _categories.list();
+    return ToolExecution(
+      toolCallId: call.id,
+      toolName: call.name,
+      ok: true,
+      content: jsonEncode({
+        'status': 'completed',
+        'action': action,
+        'category_id': category.id,
+        'name': category.name,
+        'icon': category.icon,
+        'color_hex': category.colorHex,
+        'categories': [
+          for (final item in categories)
+            {'id': item.id, 'name': item.name, 'type': item.type.name},
+        ],
+      }),
+    );
+  }
+
+  /// Validates a model-supplied icon slug; `null` means "keep the default".
+  String? _categoryIconSlug(Object? value) {
+    final raw = _optionalString(value);
+    if (raw == null) return null;
+    if (!categoryIconCatalog.containsKey(raw)) {
+      throw ValidationException(
+        'آیکون «$raw» معتبر نیست. یکی از آیکون‌های فهرست دسته‌بندی را بفرست.',
+      );
+    }
+    return raw;
+  }
+
+  /// Validates a model-supplied colour; `null` means "keep the default".
+  String? _categoryColor(Object? value) {
+    final raw = _optionalString(value);
+    if (raw == null) return null;
+    final normalized = raw.startsWith('#') ? raw : '#$raw';
+    if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(normalized)) {
+      throw const ValidationException(
+        'رنگ دسته‌بندی باید به شکل #RRGGBB باشد.',
+      );
+    }
+    return normalized.toUpperCase();
   }
 
   Future<ToolExecution> _addAccount(
@@ -482,7 +571,11 @@ class ToolExecutor {
     );
   }
 
-  Future<ToolExecution> _queryTransactions(ToolCall call) async {
+  Future<ToolExecution> _queryTransactions(
+    ToolCall call,
+    CurrencyUnit displayCurrency,
+  ) async {
+    final formatter = MoneyFormatter(unit: displayCurrency);
     final args = call.arguments;
     final range = _resolveRange(args['date_range']);
     final type = TransactionType.tryParse(args['transaction_type']);
@@ -527,7 +620,11 @@ class ToolExecutor {
     final content = {
       'ok': true,
       'date_range': {'start': range.start.toIso(), 'end': range.end.toIso()},
+      'display_currency': displayCurrency.name,
       'totals': {
+        'income_display': formatter.format(income),
+        'expense_display': formatter.format(expense),
+        'net_display': formatter.format(income - expense),
         'income_rial': income.value,
         'expense_rial': expense.value,
         'net_rial': (income - expense).value,
@@ -539,6 +636,7 @@ class ToolExecutor {
             'date': CalendarDate.fromStored(row.transactionDate).toIso(),
             'type': row.type.name,
             'amount_rial': row.amountRial.value,
+            'amount_display': formatter.format(row.amountRial),
             'category': row.categoryName ?? 'بدون دسته‌بندی',
             'account': row.accountName,
             'description': row.description,

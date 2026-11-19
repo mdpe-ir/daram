@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/constants/category_icons.dart';
 import '../../core/constants/iranian_banks.dart';
 import '../../core/formatting/persian_formatting.dart';
 import '../../core/money/currency.dart';
@@ -485,34 +486,6 @@ String _monogramFrom(String name) {
   final first = words.first.characters.first;
   final second = words.length > 1 ? words[1].characters.first : '';
   return '$first$second';
-}
-
-/// Maps the category icon slugs stored in the database to Lucide icons.
-IconData categoryIcon(String slug) {
-  return switch (slug) {
-    'utensils' => LucideIcons.utensils,
-    'bus' => LucideIcons.bus,
-    'shopping-bag' => LucideIcons.shoppingBag,
-    'shirt' => LucideIcons.shirt,
-    'house' => LucideIcons.house,
-    'receipt-text' => LucideIcons.receiptText,
-    'heart-pulse' => LucideIcons.heartPulse,
-    'gamepad-2' => LucideIcons.gamepad2,
-    'graduation-cap' => LucideIcons.graduationCap,
-    'repeat-2' => LucideIcons.repeat2,
-    'plane' => LucideIcons.plane,
-    'circle-ellipsis' => LucideIcons.circleEllipsis,
-    'briefcase' => LucideIcons.briefcase,
-    'laptop' => LucideIcons.laptop,
-    'trending-up' => LucideIcons.trendingUp,
-    'gift' => LucideIcons.gift,
-    'tag' => LucideIcons.tag,
-    'circle-plus' => LucideIcons.circlePlus,
-    'wallet' => LucideIcons.wallet,
-    'landmark' => LucideIcons.landmark,
-    'coins' => LucideIcons.coins,
-    _ => LucideIcons.circleEllipsis,
-  };
 }
 
 class CategoryAvatar extends StatelessWidget {
