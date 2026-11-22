@@ -25,6 +25,7 @@ class SettingsScreen extends ConsumerWidget {
         ref.watch(settingsControllerProvider).value ??
         const AppSettings.defaults();
     final package = ref.watch(packageInfoProvider).value;
+    final logStore = ref.watch(aiLogStoreProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
 
     return Scaffold(
@@ -180,6 +181,19 @@ class SettingsScreen extends ConsumerWidget {
                         : 'کلید API را وارد کن تا گفتگو فعال شود',
                     onTap: () => context.push('/settings/ai'),
                     showDivider: true,
+                  ),
+                  ListenableBuilder(
+                    listenable: logStore,
+                    builder: (context, _) => _SettingsTile(
+                      icon: LucideIcons.scrollText,
+                      color: colors.warning,
+                      title: 'گزارش‌های دستیار',
+                      subtitle: logStore.errorCount > 0
+                          ? '${PersianDigits.toPersian('${logStore.errorCount}')} خطا ثبت شده · برای عیب‌یابی'
+                          : 'رویدادهای درخواست‌ها برای عیب‌یابی',
+                      onTap: () => context.push('/settings/logs'),
+                      showDivider: true,
+                    ),
                   ),
                   _SettingsTile(
                     icon: LucideIcons.tags,

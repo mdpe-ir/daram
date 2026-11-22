@@ -13,7 +13,9 @@ import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/currency.dart';
 import '../../../core/money/rial.dart';
 import '../../../core/time/calendar_date.dart';
+import '../../../core/time/jalali_text.dart';
 import '../../../data/database/app_database.dart';
+import '../../assets/domain/asset_quantity.dart';
 import '../../dashboard/data/analytics_repository.dart';
 import '../../transactions/data/transaction_repository.dart';
 import '../../transactions/domain/transaction_record.dart';
@@ -24,6 +26,30 @@ String shapePersian(String text) {
   if (text.isEmpty) return text;
   return String.fromCharCodes(
     bidi.logicalToVisual(ArabicReshaper.instance.reshape(text)),
+  );
+}
+
+/// A PDF text run whose glyphs are already in visual order.
+///
+/// [shapePersian] applies bidi's logical-to-visual conversion, so the PDF
+/// renderer must draw it left-to-right. Setting RTL here would reverse the
+/// shaped string a second time and produce mirrored words (the old bug).
+pw.Text pdfRtlText(
+  String text, {
+  double size = 10,
+  bool isBold = false,
+  PdfColor? color,
+  pw.TextAlign align = pw.TextAlign.right,
+}) {
+  return pw.Text(
+    shapePersian(text),
+    textDirection: pw.TextDirection.ltr,
+    textAlign: align,
+    style: pw.TextStyle(
+      fontSize: size,
+      fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      color: color ?? PdfColors.grey900,
+    ),
   );
 }
 
@@ -64,13 +90,17 @@ class ExportService {
     'chat_messages',
     'pending_actions',
     'financial_operations',
-    ..._smsTables,
+    ..._optionalBackupTables,
   ];
 
-  static const _smsTables = [
+  static const _optionalBackupTables = [
     'sms_sender_links',
     'sms_suggestions',
     'sms_patterns',
+    'sms_sender_dismissals',
+    'obligations',
+    'obligation_payments',
+    'asset_holdings',
   ];
 
   static const Map<String, Set<String>> _allowedColumns = <String, Set<String>>{
@@ -201,6 +231,28 @@ class ExportService {
       'status',
     },
     'sms_patterns': {'key', 'rule'},
+    'sms_sender_dismissals': {'sender'},
+    'obligations': {
+      'id',
+      'counterparty',
+      'is_receivable',
+      'amount_rial',
+      'due_date',
+      'note',
+      'created_at',
+    },
+    'obligation_payments': {'id', 'obligation_id', 'amount_rial', 'paid_on'},
+    'asset_holdings': {
+      'id',
+      'name',
+      'kind',
+      'currency_code',
+      'quantity_micros',
+      'rate_rial',
+      'rate_date',
+      'is_market_rate',
+      'created_at',
+    },
   };
 
   /// CSV of all transactions in [range], with a BOM so Excel reads Persian.
@@ -275,6 +327,7 @@ class ExportService {
       usePersianDigits: true,
     );
     final jalali = CalendarDate.fromStored(DateTime.now());
+    const dateText = JalaliText();
 
     final doc = pw.Document(
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
@@ -288,22 +341,18 @@ class ExportService {
       bool isBold = false,
       PdfColor? color,
       pw.TextAlign align = pw.TextAlign.right,
-    }) {
-      return pw.Text(
-        shapePersian(text),
-        textDirection: pw.TextDirection.rtl,
-        textAlign: align,
-        style: pw.TextStyle(
-          fontSize: size,
-          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: color ?? PdfColors.grey900,
-        ),
-      );
-    }
+    }) => pdfRtlText(
+      text,
+      size: size,
+      isBold: isBold,
+      color: color,
+      align: align,
+    );
 
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(36),
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -338,9 +387,7 @@ class ExportService {
                     ),
                   ],
                 ),
-                rtlText(
-                  'تولید در ${jalali.jalali.year}/${jalali.jalali.month}/${jalali.jalali.day}',
-                ),
+                rtlText('تولید در ${dateText.numeric(jalali)}'),
               ],
             ),
             pw.SizedBox(height: 10),
@@ -357,6 +404,8 @@ class ExportService {
             ),
             pw.Text(
               '${context.pageNumber} / ${context.pagesCount}',
+              textDirection: pw.TextDirection.ltr,
+              textAlign: pw.TextAlign.left,
               style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
             ),
           ],
@@ -365,8 +414,8 @@ class ExportService {
           rtlText('گزارش مالی', size: 22, isBold: true),
           pw.SizedBox(height: 4),
           rtlText(
-            'از ${CalendarDate.fromStored(range.start.stored).jalali.year}/${CalendarDate.fromStored(range.start.stored).jalali.month}/${CalendarDate.fromStored(range.start.stored).jalali.day}'
-            ' تا ${CalendarDate.fromStored(range.end.stored).jalali.year}/${CalendarDate.fromStored(range.end.stored).jalali.month}/${CalendarDate.fromStored(range.end.stored).jalali.day}',
+            'از ${dateText.numeric(CalendarDate.fromStored(range.start.stored))}'
+            ' تا ${dateText.numeric(CalendarDate.fromStored(range.end.stored))}',
             size: 10,
             color: PdfColors.grey600,
           ),
@@ -412,9 +461,9 @@ class ExportService {
                 ),
               ),
               columnWidths: const {
-                0: pw.FlexColumnWidth(3),
+                0: pw.FlexColumnWidth(1.2),
                 1: pw.FlexColumnWidth(2),
-                2: pw.FlexColumnWidth(1.2),
+                2: pw.FlexColumnWidth(3),
               },
               children: [
                 pw.TableRow(
@@ -424,7 +473,7 @@ class ExportService {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(6),
-                      child: rtlText('دسته‌بندی', size: 9, isBold: true),
+                      child: rtlText('سهم', size: 9, isBold: true),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(6),
@@ -432,7 +481,7 @@ class ExportService {
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(6),
-                      child: rtlText('سهم', size: 9, isBold: true),
+                      child: rtlText('دسته‌بندی', size: 9, isBold: true),
                     ),
                   ],
                 ),
@@ -441,7 +490,12 @@ class ExportService {
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(6),
-                        child: rtlText(item.name, size: 9),
+                        child: rtlText(
+                          PersianDigits.toPersian(
+                            '${(item.share * 100).round()}٪',
+                          ),
+                          size: 9,
+                        ),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(6),
@@ -449,10 +503,7 @@ class ExportService {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(6),
-                        child: rtlText(
-                          '${(item.share * 100).round()}٪',
-                          size: 9,
-                        ),
+                        child: rtlText(item.name, size: 9),
                       ),
                     ],
                   ),
@@ -472,12 +523,12 @@ class ExportService {
                 ),
               ),
               columnWidths: const {
-                0: pw.FlexColumnWidth(1.3),
-                1: pw.FlexColumnWidth(1),
-                2: pw.FlexColumnWidth(2.2),
-                3: pw.FlexColumnWidth(1.5),
-                4: pw.FlexColumnWidth(1.8),
-                5: pw.FlexColumnWidth(2),
+                0: pw.FlexColumnWidth(2),
+                1: pw.FlexColumnWidth(1.8),
+                2: pw.FlexColumnWidth(1.5),
+                3: pw.FlexColumnWidth(2.2),
+                4: pw.FlexColumnWidth(1),
+                5: pw.FlexColumnWidth(1.3),
               },
               children: [
                 pw.TableRow(
@@ -487,19 +538,7 @@ class ExportService {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(5),
-                      child: rtlText('تاریخ', size: 8, isBold: true),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(5),
-                      child: rtlText('نوع', size: 8, isBold: true),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(5),
-                      child: rtlText('دسته‌بندی', size: 8, isBold: true),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(5),
-                      child: rtlText('حساب', size: 8, isBold: true),
+                      child: rtlText('توضیح', size: 8, isBold: true),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(5),
@@ -507,7 +546,19 @@ class ExportService {
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(5),
-                      child: rtlText('توضیح', size: 8, isBold: true),
+                      child: rtlText('حساب', size: 8, isBold: true),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: rtlText('دسته‌بندی', size: 8, isBold: true),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: rtlText('نوع', size: 8, isBold: true),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: rtlText('تاریخ', size: 8, isBold: true),
                     ),
                   ],
                 ),
@@ -516,24 +567,7 @@ class ExportService {
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: rtlText(
-                          '${CalendarDate.fromStored(row.transactionDate).jalali.year}/'
-                          '${CalendarDate.fromStored(row.transactionDate).jalali.month}/'
-                          '${CalendarDate.fromStored(row.transactionDate).jalali.day}',
-                          size: 8,
-                        ),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: rtlText(row.type.labelFa, size: 8),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: rtlText(row.categoryName ?? '—', size: 8),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: rtlText(row.accountName ?? '—', size: 8),
+                        child: rtlText(row.description ?? '—', size: 8),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
@@ -545,7 +579,24 @@ class ExportService {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: rtlText(row.description ?? '—', size: 8),
+                        child: rtlText(row.accountName ?? '—', size: 8),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: rtlText(row.categoryName ?? '—', size: 8),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: rtlText(row.type.labelFa, size: 8),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: rtlText(
+                          dateText.numeric(
+                            CalendarDate.fromStored(row.transactionDate),
+                          ),
+                          size: 8,
+                        ),
                       ),
                     ],
                   ),
@@ -638,7 +689,8 @@ class ExportService {
     final tables = <String, List<Map<String, Object?>>>{};
     for (final table in tableOrder) {
       final raw =
-          rawTables[table] ?? (_smsTables.contains(table) ? const [] : null);
+          rawTables[table] ??
+          (_optionalBackupTables.contains(table) ? const [] : null);
       if (raw is! List) {
         throw ValidationException('جدول «$table» در فایل پشتیبان نیست.');
       }
@@ -668,6 +720,7 @@ class ExportService {
     }
 
     _validateReferences(tables);
+    _validatePortfolio(tables);
 
     await _db.transaction(() async {
       for (final table in tableOrder.reversed) {
@@ -759,6 +812,42 @@ class ExportService {
         throw const ValidationException(
           'پیش‌نویسی به گفتگویی ناموجود اشاره می‌کند.',
         );
+      }
+    }
+  }
+
+  void _validatePortfolio(Map<String, List<Map<String, Object?>>> tables) {
+    int positiveInt(Object? value, int max) {
+      if (value is! int || value <= 0 || value > max) {
+        throw const ValidationException(
+          'مقدار مالی در فایل پشتیبان معتبر نیست.',
+        );
+      }
+      return value;
+    }
+
+    final remaining = <String, int>{
+      for (final row in tables['obligations']!)
+        '${row['id']}': positiveInt(row['amount_rial'], Rial.maxAbsoluteValue),
+    };
+    for (final row in tables['obligation_payments']!) {
+      final id = '${row['obligation_id']}';
+      final balance = remaining[id];
+      final amount = positiveInt(row['amount_rial'], Rial.maxAbsoluteValue);
+      if (balance == null || amount > balance) {
+        throw const ValidationException(
+          'پرداختی در فایل پشتیبان با مانده سازگار نیست.',
+        );
+      }
+      remaining[id] = balance - amount;
+    }
+
+    for (final row in tables['asset_holdings']!) {
+      final quantity = AssetQuantity.fromMicros(
+        positiveInt(row['quantity_micros'], AssetQuantity.maxMicros),
+      );
+      if (row['rate_rial'] case final rate?) {
+        quantity.valueAt(Rial(positiveInt(rate, Rial.maxAbsoluteValue)));
       }
     }
   }

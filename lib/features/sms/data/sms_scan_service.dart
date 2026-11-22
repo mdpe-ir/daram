@@ -12,7 +12,12 @@ import 'sms_ai_classifier.dart';
 import 'sms_inbox.dart';
 import 'sms_review_repository.dart';
 
-typedef SenderCandidate = ({String sender, int count, List<String> accountIds});
+typedef SenderCandidate = ({
+  String sender,
+  int count,
+  List<String> accountIds,
+  List<InboxSms> examples,
+});
 
 class SmsScanService {
   const SmsScanService(this.inbox, this.repository);
@@ -51,7 +56,7 @@ class SmsScanService {
     final patterns = await repository.patterns();
     final bankMessages = <_Candidate>[];
     final receipts = <int, List<_Receipt>>{};
-    final unknown = <String, List<Set<String>>>{};
+    final unknown = <String, _SenderSamples>{};
 
     await for (final message in inbox.readSince(since)) {
       if (isEnabled?.call() == false) return [];
@@ -73,7 +78,9 @@ class SmsScanService {
               })
               .map((account) => account.id)
               .toSet();
-          unknown.putIfAbsent(message.sender, () => []).add(possible);
+          unknown
+              .putIfAbsent(message.sender, _SenderSamples.new)
+              .add(message, possible);
         }
         if (!shape.resemblesBankNotice) {
           final receipt = shape.localRule(receipt: true);
@@ -365,17 +372,19 @@ class SmsScanService {
       inferred: inferred,
       scannedLinks: links,
     );
+    final dismissed = await repository.dismissedSenders();
     final suggestions = [
       for (final entry in unknown.entries)
-        (
-          sender: entry.key,
-          count: entry.value.length,
-          accountIds: [
-            for (final account in accounts)
-              if (entry.value.any((ids) => ids.contains(account.id)))
-                account.id,
-          ],
-        ),
+        if (!dismissed.contains(entry.key))
+          (
+            sender: entry.key,
+            count: entry.value.count,
+            examples: List<InboxSms>.unmodifiable(entry.value.examples),
+            accountIds: [
+              for (final account in accounts)
+                if (entry.value.accountIds.contains(account.id)) account.id,
+            ],
+          ),
     ];
     suggestions.sort((first, second) => second.count.compareTo(first.count));
     return suggestions;
@@ -399,6 +408,21 @@ class SmsScanService {
     (RegExp(r'رستوران|کافه|غذا'), 'cat_food', 'خوراک'),
     (RegExp(r'خرید از فروشگاه|سفارش فروشگاه'), 'cat_shopping', 'خرید'),
   ];
+}
+
+// Keep the newest matching notices even when inbox results arrive out of order.
+class _SenderSamples {
+  int count = 0;
+  final accountIds = <String>{};
+  final examples = <InboxSms>[];
+
+  void add(InboxSms message, Set<String> possibleAccounts) {
+    count++;
+    accountIds.addAll(possibleAccounts);
+    examples.add(message);
+    examples.sort((a, b) => b.date.compareTo(a.date));
+    if (examples.length > 2) examples.removeLast();
+  }
 }
 
 class _Candidate {

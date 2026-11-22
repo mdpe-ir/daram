@@ -278,6 +278,28 @@ class ChatRepository {
     return rows.map((row) => row.toDomain()).toList();
   }
 
+  /// Whether an assistant message in [sessionId] already showed [suggestionId]
+  /// to the user. SMS decisions are only allowed after that.
+  Future<bool> hasPresentedSmsSuggestion({
+    required String sessionId,
+    required String suggestionId,
+  }) async {
+    final rows =
+        await (_db.select(_db.chatMessages)..where(
+              (table) =>
+                  table.sessionId.equals(sessionId) &
+                  table.role.equalsValue(ChatRole.assistant),
+            ))
+            .get();
+    for (final row in rows) {
+      final ids = decodeMetadata(row.metadataJson)['smsSuggestionIds'];
+      if (ids is List && ids.any((item) => '$item' == suggestionId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> updatePendingAction(PendingAction action) async {
     await (_db.update(
       _db.pendingActions,

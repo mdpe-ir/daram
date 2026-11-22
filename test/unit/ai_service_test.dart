@@ -12,11 +12,14 @@ import 'package:daram/features/ai/data/tool_registry.dart';
 import 'package:daram/features/ai/domain/ai_models.dart';
 import 'package:daram/features/ai/domain/ai_provider.dart';
 import 'package:daram/features/categories/data/category_repository.dart';
+import 'package:daram/features/chat/data/chat_repository.dart';
 import 'package:daram/features/dashboard/data/analytics_repository.dart';
 import 'package:daram/features/loans/data/loan_repository.dart';
+import 'package:daram/features/sms/data/sms_review_repository.dart';
 import 'package:daram/features/transactions/data/operation_repository.dart';
 import 'package:daram/features/transactions/data/transaction_repository.dart';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,6 +34,7 @@ class _ScriptedProvider implements AIProvider {
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   }) async* {
     final script = scripts[calls.clamp(0, scripts.length - 1)];
     calls++;
@@ -84,6 +88,8 @@ void main() {
       transactions: transactions,
       loans: loans,
       analytics: AnalyticsRepository(db, accounts, transactions, loans),
+      sms: SmsReviewRepository(db, transactions),
+      chat: ChatRepository(db),
     );
   });
 
@@ -248,5 +254,67 @@ void main() {
         .toList();
     expect(events.single, isA<ChatRunFailed>());
     expect(provider.calls, 0);
+  });
+
+  test('native loop forwards SMS suggestion ids for chat cards', () async {
+    final account = (await db.select(db.accounts).get()).single;
+    await db
+        .into(db.smsSuggestions)
+        .insert(
+          SmsSuggestionsCompanion.insert(
+            id: 'sms-ai-1',
+            sender: '1001',
+            receivedAt: DateTime.utc(2026, 11, 6, 10),
+            template: 'برداشت: [n0] ریال',
+            payload: jsonEncode({
+              'type': 'expense',
+              'amountRial': 2000000,
+              'accountId': account.id,
+              'accountName': account.accountName,
+              'categoryId': 'cat_food',
+              'categoryName': 'خوراک و رستوران',
+              'date': '2026-11-06',
+              'description': 'پارکینگ',
+            }),
+            status: const Value('pending'),
+          ),
+        );
+    final provider = _ScriptedProvider([
+      [
+        AIStreamToolCalls([
+          const ToolCall(
+            id: 'sms-call',
+            name: 'review_sms_suggestions',
+            arguments: {},
+          ),
+        ]),
+        const AIStreamDone(finishReason: 'tool_calls'),
+      ],
+      [
+        const AIStreamText('این پیشنهاد را ببین و بگو تأیید می‌کنی یا نه.'),
+        const AIStreamDone(finishReason: 'stop'),
+      ],
+    ]);
+    final service = AIChatService(
+      providers: _FakeRegistry(provider),
+      tools: tools,
+      executor: executor,
+    );
+
+    final events = await service
+        .run(
+          config: config(AIToolMode.native),
+          systemPrompt: 'system',
+          history: const [],
+          userMessage: 'پیامک‌ها را نشانم بده',
+          sessionId: 'session-1',
+          defaultCurrency: CurrencyUnit.toman,
+        )
+        .toList();
+    final completed = events.whereType<ChatRunCompleted>().single;
+    expect(completed.smsSuggestionIds, ['sms-ai-1']);
+    expect(completed.text, contains('تأیید'));
+    expect(completed.actions, isEmpty);
+    expect(await db.select(db.transactions).get(), isEmpty);
   });
 }

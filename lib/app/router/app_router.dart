@@ -12,6 +12,7 @@ import '../../features/settings/presentation/about_screen.dart';
 import '../../features/settings/presentation/ai_settings_screen.dart';
 import '../../features/settings/presentation/categories_screen.dart';
 import '../../features/settings/presentation/data_management_screen.dart';
+import '../../features/settings/presentation/logs_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/sms/presentation/sms_review_screen.dart';
@@ -73,23 +74,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                 redirect: (context, state) =>
                     state.uri.path == '/records' ? '/records/accounts' : null,
                 routes: [
-                  GoRoute(
-                    path: 'accounts',
-                    builder: (context, state) => const RecordsShellScreen(
-                      section: RecordsSection.accounts,
+                  for (final section in RecordsSection.values)
+                    GoRoute(
+                      path: section.name,
+                      builder: (context, state) =>
+                          RecordsShellScreen(section: section),
                     ),
-                  ),
-                  GoRoute(
-                    path: 'transactions',
-                    builder: (context, state) => const RecordsShellScreen(
-                      section: RecordsSection.transactions,
-                    ),
-                  ),
-                  GoRoute(
-                    path: 'loans',
-                    builder: (context, state) =>
-                        const RecordsShellScreen(section: RecordsSection.loans),
-                  ),
                 ],
               ),
             ],
@@ -111,6 +101,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'data',
                     builder: (context, state) => const DataManagementScreen(),
+                  ),
+                  GoRoute(
+                    path: 'logs',
+                    builder: (context, state) => const LogsScreen(),
                   ),
                   GoRoute(
                     path: 'about',

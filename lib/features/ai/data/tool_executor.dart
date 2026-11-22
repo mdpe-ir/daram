@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/category_icons.dart';
+import '../../../core/constants/category_styles.dart';
 import '../../../core/constants/iranian_banks.dart';
 import '../../../core/domain/enums.dart';
 import '../../../core/errors/app_exception.dart';
@@ -11,9 +12,13 @@ import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/currency.dart';
 import '../../../core/money/rial.dart';
 import '../../../core/time/calendar_date.dart';
+import '../../../core/time/jalali_text.dart';
 import '../../../core/time/persian_date_parser.dart';
+import '../../../data/database/app_database.dart';
 import '../../accounts/data/account_repository.dart';
+import '../../chat/data/chat_repository.dart';
 import '../../chat/domain/chat_models.dart';
+import '../../chat/domain/drafts.dart';
 import '../../accounts/domain/account.dart';
 import '../../categories/data/category_repository.dart';
 import '../../categories/domain/category.dart';
@@ -21,6 +26,7 @@ import '../../dashboard/data/analytics_repository.dart';
 import '../../dashboard/domain/analytics.dart';
 import '../../loans/data/loan_repository.dart';
 import '../../loans/domain/loan.dart';
+import '../../sms/data/sms_review_repository.dart';
 import '../../transactions/data/transaction_repository.dart';
 import '../../transactions/domain/transaction_record.dart';
 import '../domain/ai_models.dart';
@@ -37,6 +43,7 @@ class ToolExecution {
     required this.content,
     this.pendingAction,
     this.report,
+    this.smsSuggestionIds = const <String>[],
     this.userMessage,
   });
 
@@ -53,6 +60,9 @@ class ToolExecution {
   /// Serialised report attached to the assistant message for the chat card.
   final Map<String, Object?>? report;
 
+  /// SMS suggestions shown by this execution, rendered as cards in chat.
+  final List<String> smsSuggestionIds;
+
   /// Short Persian sentence the UI may show while the model composes its reply.
   final String? userMessage;
 }
@@ -61,7 +71,9 @@ class ToolExecution {
 /// pending drafts.
 ///
 /// This class is the boundary between "the model proposed something" and
-/// "the app is willing to save something". Nothing here writes financial data.
+/// "the app is willing to save something". Financial tools only create drafts;
+/// SMS decision tools act on a suggestion the user has already seen in the
+/// conversation, and can never invent an amount or a target row.
 class ToolExecutor {
   ToolExecutor({
     required ToolRegistry registry,
@@ -70,6 +82,8 @@ class ToolExecutor {
     required TransactionRepository transactions,
     required LoanRepository loans,
     required AnalyticsRepository analytics,
+    required SmsReviewRepository sms,
+    required ChatRepository chat,
     ArgumentParser? parser,
   }) : _registry = registry,
        _accounts = accounts,
@@ -77,6 +91,8 @@ class ToolExecutor {
        _transactions = transactions,
        _loans = loans,
        _analytics = analytics,
+       _sms = sms,
+       _chat = chat,
        _parser = parser ?? const ArgumentParser();
 
   final ToolRegistry _registry;
@@ -85,6 +101,8 @@ class ToolExecutor {
   final TransactionRepository _transactions;
   final LoanRepository _loans;
   final AnalyticsRepository _analytics;
+  final SmsReviewRepository _sms;
+  final ChatRepository _chat;
   final ArgumentParser _parser;
   static const _uuid = Uuid();
 
@@ -122,7 +140,25 @@ class ToolExecutor {
           call,
           defaultCurrency,
         ),
-        DaramTool.generateReport => _generateReport(call),
+        DaramTool.generateReport => _generateReport(call, defaultCurrency),
+        DaramTool.reviewSmsSuggestions => _reviewSmsSuggestions(
+          call,
+          defaultCurrency,
+        ),
+        DaramTool.confirmSmsSuggestion => _confirmSmsSuggestion(
+          call,
+          sessionId,
+          defaultCurrency,
+        ),
+        DaramTool.editSmsSuggestion => _editSmsSuggestion(
+          call,
+          sessionId,
+          defaultCurrency,
+        ),
+        DaramTool.dismissSmsSuggestion => _dismissSmsSuggestion(
+          call,
+          sessionId,
+        ),
         null => _error(call, 'ابزار «${call.name}» شناخته نشد.'),
       };
     } on AppException catch (error) {
@@ -149,11 +185,30 @@ class ToolExecutor {
     final colorHex = _categoryColor(args['color_hex']);
     Category? category;
     if (action == 'create') {
+      final name = _parser.requireString(args['name'], field: 'نام دسته‌بندی');
+      final existing = await _categories.list(type: type);
+      final suggestion = suggestCategoryStyle(
+        name,
+        type,
+        usedColors: existing.map((item) => item.colorHex),
+      );
+      // The model can omit the style or fall back to the old tag/purple
+      // defaults. For a topic we understand, prefer the semantic suggestion so
+      // every new category does not look identical.
+      var resolvedIcon = suggestion.icon;
+      if (icon != null && !(suggestion.semantic && icon == 'tag')) {
+        resolvedIcon = icon;
+      }
+      var resolvedColor = suggestion.colorHex;
+      if (colorHex != null &&
+          !(suggestion.semantic && colorHex.toUpperCase() == '#8B5CF6')) {
+        resolvedColor = colorHex;
+      }
       category = await _categories.create(
-        name: _parser.requireString(args['name'], field: 'نام دسته‌بندی'),
+        name: name,
         type: type,
-        icon: icon ?? 'tag',
-        colorHex: colorHex ?? '#8B5CF6',
+        icon: resolvedIcon,
+        colorHex: resolvedColor,
       );
     } else {
       final id = _parser.requireString(
@@ -167,10 +222,31 @@ class ToolExecutor {
         );
       }
       if (action == 'rename') {
-        category = category.copyWith(
-          name: _parser.requireString(args['name'], field: 'نام دسته‌بندی'),
-          icon: icon,
-          colorHex: colorHex,
+        final name = _parser.requireString(
+          args['name'],
+          field: 'نام دسته‌بندی',
+        );
+        final existing = await _categories.list(type: type);
+        final suggestion = suggestCategoryStyle(
+          name,
+          type,
+          usedColors: existing.map((item) => item.colorHex),
+        );
+        final current = category;
+        final resolvedIcon = icon == null
+            ? current.icon
+            : suggestion.semantic && icon == 'tag'
+            ? suggestion.icon
+            : icon;
+        final resolvedColor = colorHex == null
+            ? current.colorHex
+            : suggestion.semantic && colorHex.toUpperCase() == '#8B5CF6'
+            ? suggestion.colorHex
+            : colorHex;
+        category = current.copyWith(
+          name: name,
+          icon: resolvedIcon,
+          colorHex: resolvedColor,
         );
         await _categories.update(category);
       } else {
@@ -191,7 +267,13 @@ class ToolExecutor {
         'color_hex': category.colorHex,
         'categories': [
           for (final item in categories)
-            {'id': item.id, 'name': item.name, 'type': item.type.name},
+            {
+              'id': item.id,
+              'name': item.name,
+              'type': item.type.name,
+              'icon': item.icon,
+              'color_hex': item.colorHex,
+            },
         ],
       }),
     );
@@ -617,9 +699,19 @@ class ToolExecutor {
       rows.where((row) => row.isExpense).map((row) => row.amountRial),
     );
 
+    final jalali = JalaliText();
     final content = {
       'ok': true,
-      'date_range': {'start': range.start.toIso(), 'end': range.end.toIso()},
+      'date_range': {
+        'start': range.start.toIso(),
+        'end': range.end.toIso(),
+        'start_jalali': const JalaliText(persianDigits: false)
+            .numeric(range.start),
+        'end_jalali': const JalaliText(persianDigits: false).numeric(range.end),
+        'label_numeric_fa':
+            '${jalali.numeric(range.start)} تا ${jalali.numeric(range.end)}',
+        'label_fa': '${jalali.date(range.start)} تا ${jalali.date(range.end)}',
+      },
       'display_currency': displayCurrency.name,
       'totals': {
         'income_display': formatter.format(income),
@@ -634,6 +726,11 @@ class ToolExecutor {
         for (final row in rows.take(limit))
           {
             'date': CalendarDate.fromStored(row.transactionDate).toIso(),
+            'date_jalali': const JalaliText(persianDigits: false)
+                .numeric(CalendarDate.fromStored(row.transactionDate)),
+            'date_label_fa': jalali.date(
+              CalendarDate.fromStored(row.transactionDate),
+            ),
             'type': row.type.name,
             'amount_rial': row.amountRial.value,
             'amount_display': formatter.format(row.amountRial),
@@ -653,7 +750,10 @@ class ToolExecutor {
     );
   }
 
-  Future<ToolExecution> _generateReport(ToolCall call) async {
+  Future<ToolExecution> _generateReport(
+    ToolCall call,
+    CurrencyUnit displayCurrency,
+  ) async {
     final args = call.arguments;
     final start = _parser
         .parseDate(args['start_date'], field: 'تاریخ شروع')
@@ -686,24 +786,45 @@ class ToolExecutor {
     );
 
     final metadata = _serializeReport(report);
+    final money = MoneyFormatter(unit: displayCurrency);
+    final rangeText = JalaliText();
     final content = {
       'ok': true,
+      'display_currency': displayCurrency.name,
       'report': {
-        'date_range': {'start': start.toIso(), 'end': end.toIso()},
+        'date_range': {
+          'start': start.toIso(),
+          'end': end.toIso(),
+          'start_jalali': const JalaliText(persianDigits: false).numeric(start),
+          'end_jalali': const JalaliText(persianDigits: false).numeric(end),
+          'label_numeric_fa':
+              '${rangeText.numeric(start)} تا ${rangeText.numeric(end)}',
+          'label_fa': '${rangeText.date(start)} تا ${rangeText.date(end)}',
+        },
         'income_rial': report.summary.income.value,
         'expense_rial': report.summary.expense.value,
         'net_rial': report.summary.net.value,
+        'income_display': money.format(report.summary.income),
+        'expense_display': money.format(report.summary.expense),
+        'net_display': money.format(report.summary.net),
         'transaction_count': report.summary.transactionCount,
+        'transaction_count_display': PersianDigits.toPersian(
+          '${report.summary.transactionCount}',
+        ),
         'categories': [
           for (final item in report.categories.take(10))
             {
               'name': item.name,
               'amount_rial': item.amount.value,
+              'amount_display': money.format(item.amount),
               'share_percent': (item.share * 100).toStringAsFixed(1),
+              'share_display': PersianDigits.toPersian(
+                '${(item.share * 100).round()}٪',
+              ),
             },
         ],
       },
-      'note': 'جمع‌ها توسط برنامه محاسبه شده‌اند؛ آن‌ها را تغییر نده.',
+      'note': 'جمع‌ها توسط برنامه محاسبه شده‌اند؛ آن‌ها را تغییر نده. بازه و مبالغ نمایشی را از label_fa و *_display نقل کن.',
     };
 
     return ToolExecution(
@@ -715,6 +836,275 @@ class ToolExecutor {
       userMessage: 'گزارش مالی آماده شد.',
     );
   }
+
+  Future<ToolExecution> _reviewSmsSuggestions(
+    ToolCall call,
+    CurrencyUnit displayCurrency,
+  ) async {
+    final limit = call.arguments['limit'] == null
+        ? 10
+        : _parser.parseInteger(
+            call.arguments['limit'],
+            field: 'تعداد پیشنهادها',
+            min: 1,
+            max: 20,
+          );
+    final rows = await _sms.open();
+    final accounts = await _accounts.list();
+    final categories = await _categories.list();
+    final accountIds = {for (final account in accounts) account.id};
+    final categoryIds = {for (final category in categories) category.id};
+    final formatter = MoneyFormatter(unit: displayCurrency);
+    final shown = rows.take(limit).toList();
+
+    return ToolExecution(
+      toolCallId: call.id,
+      toolName: call.name,
+      ok: true,
+      content: jsonEncode({
+        'ok': true,
+        'count': rows.length,
+        'shown': shown.length,
+        'display_currency': displayCurrency.name,
+        'suggestions': [
+          for (final row in shown)
+            _smsSuggestionJson(
+              row,
+              formatter: formatter,
+              accountIds: accountIds,
+              categoryIds: categoryIds,
+            ),
+        ],
+        'note': rows.isEmpty
+            ? 'هیچ پیشنهاد پیامکی در انتظار بازبینی روی دستگاه نیست.'
+            : 'این فهرست مستقیماً از پیشنهادهای پیامکی دستگاه خوانده شده است و در گفتگو به‌صورت کارت نمایش داده می‌شود. برای تأیید یا رد، فقط وقتی کاربر صریحاً خواست از ابزارهای confirm_sms_suggestion یا dismiss_sms_suggestion با همین suggestion_id استفاده کن. برای تغییر جزئیات از edit_sms_suggestion استفاده کن و هرگز شناسه نساز.',
+      }),
+      smsSuggestionIds: [for (final row in shown) row.id],
+      userMessage: rows.isEmpty
+          ? 'پیشنهاد پیامکی در انتظار بازبینی نیست.'
+          : 'پیشنهادهای پیامکی بررسی شد.',
+    );
+  }
+
+  Map<String, Object?> _smsSuggestionJson(
+    SmsSuggestionRow row, {
+    required MoneyFormatter formatter,
+    required Set<String> accountIds,
+    required Set<String> categoryIds,
+  }) {
+    final draft = SmsReviewRepository.draftOf(row);
+    return {
+      'suggestion_id': row.id,
+      'sender': row.sender,
+      'received_at': row.receivedAt.toUtc().toIso8601String(),
+      'type': draft.type.name,
+      'amount_rial': draft.amountRial.value,
+      'amount_display': draft.amountRial.isZero
+          ? null
+          : formatter.format(draft.amountRial),
+      'account': draft.accountName.isEmpty ? null : draft.accountName,
+      'account_id': draft.accountId.isEmpty ? null : draft.accountId,
+      'category': draft.categoryName,
+      'description': draft.description,
+      'date': draft.date.toIso(),
+      'date_jalali': JalaliText(persianDigits: false).date(draft.date),
+      'status': row.status,
+      'edited': row.editedAt != null,
+      'ready_to_confirm': SmsReviewRepository.isReady(
+        row,
+        accountIds: accountIds,
+        categoryIds: categoryIds,
+      ),
+    };
+  }
+
+  /// Resolves an open SMS suggestion by its exact id.
+  ///
+  /// Editing a draft is allowed before the cards are persisted (for example in
+  /// the same turn as a review); only confirm/dismiss require prior display.
+  Future<SmsSuggestionRow> _smsTarget(ToolCall call) async {
+    final id = _parser.requireString(
+      call.arguments['suggestion_id'],
+      field: 'شناسه پیشنهاد پیامکی',
+    );
+    final row = await _sms.find(id);
+    if (row == null) {
+      throw const NotFoundException('پیشنهاد پیامکی با این شناسه پیدا نشد.');
+    }
+    if (!SmsReviewRepository.openStatuses.contains(row.status)) {
+      throw const ValidationException(
+        'این پیشنهاد دیگر در انتظار بازبینی نیست.',
+      );
+    }
+    return row;
+  }
+
+  /// Resolves an SMS suggestion that the user has already seen in chat.
+  Future<SmsSuggestionRow> _presentedSmsTarget(
+    ToolCall call,
+    String sessionId,
+  ) async {
+    final row = await _smsTarget(call);
+    if (!await _chat.hasPresentedSmsSuggestion(
+      sessionId: sessionId,
+      suggestionId: row.id,
+    )) {
+      throw const ValidationException(
+        'این پیشنهاد هنوز در گفتگو نمایش داده نشده است. اول با review_sms_suggestions فهرست را نشان بده و بعد از دیدن و تأیید صریح کاربر اقدام کن.',
+      );
+    }
+    return row;
+  }
+
+  Future<ToolExecution> _confirmSmsSuggestion(
+    ToolCall call,
+    String sessionId,
+    CurrencyUnit displayCurrency,
+  ) async {
+    final row = await _presentedSmsTarget(call, sessionId);
+    final draft = SmsReviewRepository.draftOf(row);
+    if (row.status != 'pending' ||
+        draft.accountId.isEmpty ||
+        draft.amountRial.isZero) {
+      throw const ValidationException(
+        'این پیشنهاد هنوز مبلغ یا حساب معتبر ندارد؛ اول با edit_sms_suggestion اصلاحش کن.',
+      );
+    }
+    await _sms.confirm(row.id);
+    final formatter = MoneyFormatter(unit: displayCurrency);
+    return ToolExecution(
+      toolCallId: call.id,
+      toolName: call.name,
+      ok: true,
+      content: jsonEncode({
+        'ok': true,
+        'status': 'confirmed',
+        'suggestion_id': row.id,
+        'summary': _smsSummary(draft, formatter),
+        'message': 'این پیشنهاد به‌عنوان تراکنش ثبت شد و پول واقعی جابه‌جا نشده است؛ فقط رکورد مالی ساخته شد. حالا کوتاه به کاربر خبر بده.',
+      }),
+      userMessage: 'پیشنهاد پیامکی ثبت شد.',
+    );
+  }
+
+  Future<ToolExecution> _editSmsSuggestion(
+    ToolCall call,
+    String sessionId,
+    CurrencyUnit displayCurrency,
+  ) async {
+    final row = await _smsTarget(call);
+    final current = SmsReviewRepository.draftOf(row);
+    final args = call.arguments;
+
+    var type = current.type;
+    if (args['type'] != null) {
+      type =
+          TransactionType.tryParse(args['type']) ??
+          (throw const ValidationException(
+            'نوع تراکنش باید درآمد یا هزینه باشد.',
+          ));
+    }
+    var amount = current.amountRial;
+    if (args['amount'] != null) {
+      amount = _parser.parseMoney(
+        args['amount'],
+        args['amount_unit'],
+        fallbackUnit: displayCurrency,
+      );
+    }
+    var date = current.date;
+    if (args['date'] != null) {
+      date = _parser.parseDate(args['date'], field: 'تاریخ تراکنش').date;
+    }
+    var accountId = current.accountId;
+    var accountName = current.accountName;
+    if (args['account'] != null) {
+      final account = await _resolveAccount(
+        _parser.requireString(args['account'], field: 'حساب'),
+      );
+      accountId = account.id;
+      accountName = account.accountName;
+    }
+
+    final categoryType = type == TransactionType.income
+        ? CategoryType.income
+        : CategoryType.expense;
+    Category? category;
+    if (args['category'] != null) {
+      final name = _parser.requireString(args['category'], field: 'دسته‌بندی');
+      category = await _categories.resolve(name, categoryType);
+      if (category == null) {
+        throw ValidationException(
+          'دسته‌بندی «$name» برای این نوع تراکنش پیدا نشد.',
+        );
+      }
+    } else if (current.categoryId != null) {
+      final existing = await _categories.findById(current.categoryId!);
+      if (existing != null && existing.type == categoryType) {
+        category = existing;
+      }
+    }
+
+    var description = current.description;
+    if (args.containsKey('description')) {
+      description = _optionalString(args['description']);
+    }
+
+    final draft = TransactionDraft(
+      type: type,
+      amountRial: amount,
+      accountId: accountId,
+      accountName: accountName,
+      categoryId: category?.id,
+      categoryName: category?.name,
+      date: date,
+      description: description,
+    );
+    await _sms.updateDraft(row.id, draft);
+    final formatter = MoneyFormatter(unit: displayCurrency);
+    return ToolExecution(
+      toolCallId: call.id,
+      toolName: call.name,
+      ok: true,
+      content: jsonEncode({
+        'ok': true,
+        'status': 'updated',
+        'suggestion_id': row.id,
+        'summary': _smsSummary(draft, formatter),
+        'amount_display': amount.isZero ? null : formatter.format(amount),
+        'ready_to_confirm': accountId.isNotEmpty && !amount.isZero,
+        'message': 'پیش‌نویس پیامکی به‌روزرسانی شد و هنوز چیزی ثبت نشده است. تغییرات را کوتاه به کاربر بگو و برای ثبت نهایی منتظر تأیید صریح بمان.',
+      }),
+      userMessage: 'پیش‌نویس پیامکی ویرایش شد.',
+    );
+  }
+
+  Future<ToolExecution> _dismissSmsSuggestion(
+    ToolCall call,
+    String sessionId,
+  ) async {
+    final row = await _presentedSmsTarget(call, sessionId);
+    final ignorePattern = call.arguments['ignore_pattern'] == true;
+    await _sms.dismiss(row.id, ignorePattern: ignorePattern);
+    return ToolExecution(
+      toolCallId: call.id,
+      toolName: call.name,
+      ok: true,
+      content: jsonEncode({
+        'ok': true,
+        'status': 'dismissed',
+        'suggestion_id': row.id,
+        'message': ignorePattern
+            ? 'این پیشنهاد و قالب‌های مشابه همان سرشماره رد شدند.'
+            : 'این پیشنهاد رد شد.',
+      }),
+      userMessage: 'پیشنهاد پیامکی رد شد.',
+    );
+  }
+
+  String _smsSummary(TransactionDraft draft, MoneyFormatter formatter) =>
+      '${draft.type.labelFa} ${formatter.format(draft.amountRial)} در '
+      '${draft.accountName.isEmpty ? 'حساب نامشخص' : draft.accountName}';
 
   Map<String, Object?> _serializeReport(ReportData report) => {
     'range': {

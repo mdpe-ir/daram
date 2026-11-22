@@ -222,6 +222,39 @@ void main() {
       gemini.chatEndpoint(),
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent',
     );
+
+    const openCode = AIConfig(
+      provider: AIProviderKind.openCode,
+      baseUrl: 'https://opencode.ai/inference/openai/v1',
+      model: 'glm-5.3',
+      apiKey: 'oc_sk_test',
+    );
+    expect(
+      openCode.chatEndpoint(),
+      'https://opencode.ai/inference/openai/v1/chat/completions',
+    );
+    expect(
+      openCode.modelsEndpoint(),
+      'https://opencode.ai/inference/v1/models',
+    );
+
+    const openCodeGo = AIConfig(
+      provider: AIProviderKind.openCodeGo,
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+      model: 'kimi-k3',
+      apiKey: 'oc_sk_test',
+    );
+    expect(
+      openCodeGo.chatEndpoint(),
+      'https://opencode.ai/inference/go/openai/v1/chat/completions',
+    );
+    expect(
+      openCodeGo.modelsEndpoint(),
+      'https://opencode.ai/inference/go/v1/models',
+    );
+    expect(AIProviderKind.fromStorage('openCodeGo'), AIProviderKind.openCodeGo);
+    expect(openCode.provider.isOpenCode, isTrue);
+    expect(openCodeGo.provider.isOpenCode, isTrue);
   });
 
   test('Rial amounts round-trip through tool payloads', () {

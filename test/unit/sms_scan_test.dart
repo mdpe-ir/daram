@@ -33,6 +33,7 @@ class _ClassifierProvider implements AIProvider {
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   }) async* {
     request = messages;
     expect(tools, isEmpty);
@@ -136,6 +137,57 @@ void main() {
       expect(await transactions.list(const TransactionFilter()), isEmpty);
     },
   );
+
+  test('a rescan does not revert an edited suggestion', () async {
+    await reviews.setSenders(account.id, {'1001'}, includeHistory: true);
+    add('bank-1', '1001', 'بانک ملت\nبرداشت: ۲۰۰٬۰۰۰ ریال');
+    await scan();
+    final row = (await pending()).single;
+    final draft = SmsReviewRepository.draftOf(row);
+    final category = await categories.create(
+      name: 'شهربازی بچه‌ها',
+      type: CategoryType.expense,
+      icon: 'gamepad',
+      colorHex: '#8B5CF6',
+    );
+    await reviews.updateDraft(
+      row.id,
+      draft.copyWith(
+        categoryId: category.id,
+        categoryName: category.name,
+        description: 'شهربازی بچه‌ها',
+      ),
+    );
+    final edited = (await pending()).single;
+    expect(edited.editedAt, isNotNull);
+    expect(SmsReviewRepository.draftOf(edited).description, 'شهربازی بچه‌ها');
+
+    // The inbox changed, so the scanner runs again and derives the old draft
+    // from the same message. The edited payload must win.
+    await scan();
+    final after = (await pending()).single;
+    final afterDraft = SmsReviewRepository.draftOf(after);
+    expect(afterDraft.categoryId, category.id);
+    expect(afterDraft.categoryName, 'شهربازی بچه‌ها');
+    expect(afterDraft.description, 'شهربازی بچه‌ها');
+    expect(after.editedAt, isNotNull);
+  });
+
+  test('caps previews to recent bank notices and keeps dismissed senders out of rescans', () async {
+    add('old', '1001', 'بانک ملت\nبرداشت: 20,000 تومان', seconds: 360);
+    add('new', '1001', 'بانک ملت\nبرداشت: 30,000 تومان', seconds: 30);
+    add('middle', '1001', 'بانک ملت\nبرداشت: 25,000 تومان', seconds: 60);
+    add('otp', '1001', 'رمز دوم: 123456\nمبلغ خرید: 30,000 تومان');
+    final result = (await scan()).single;
+    expect(result.count, 3);
+    expect(result.examples.map((sms) => sms.id), ['new', 'middle']);
+
+    await reviews.dismissSender('1001');
+    expect(await scan(), isEmpty);
+    await reviews.setSenders(account.id, {'1001'}, includeHistory: true);
+    await scan();
+    expect(await pending(), hasLength(3));
+  });
 
   test('matches parking across units and learns confirmed edits', () async {
     await reviews.setSenders(account.id, {'1001'}, includeHistory: true);

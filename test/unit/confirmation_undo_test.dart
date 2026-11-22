@@ -12,6 +12,7 @@ import 'package:daram/features/ai/data/tool_registry.dart';
 import 'package:daram/features/ai/domain/ai_models.dart';
 import 'package:daram/features/categories/data/category_repository.dart';
 import 'package:daram/features/chat/data/chat_repository.dart';
+import 'package:daram/features/sms/data/sms_review_repository.dart';
 import 'package:daram/features/chat/data/confirmation_service.dart';
 import 'package:daram/features/chat/data/undo_service.dart';
 import 'package:daram/features/dashboard/data/analytics_repository.dart';
@@ -63,6 +64,8 @@ void main() {
       transactions: transactions,
       loans: loans,
       analytics: analytics,
+      sms: SmsReviewRepository(db, transactions),
+      chat: chat,
       parser: ArgumentParser(today: CalendarDate(2026, 11, 6)),
     );
     confirmations = ConfirmationService(

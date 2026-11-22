@@ -264,7 +264,10 @@ The script detects the repository's `.tool/flutter` wrapper. On this machine the
 Flutter SDK is on a read-only mount, so release tasks that update engine stamps
 need write access to the SDK cache; that is an environment constraint, not a
 requirement on a normal developer machine. The Android build then uses the
-project's documented direct-Gradle path automatically.
+project's documented direct-Gradle path automatically. In that path the script
+also mirrors `version:` from `pubspec.yaml` into `android/local.properties`
+(`flutter.versionName` / `flutter.versionCode`), because Gradle reads the app
+version from there and would otherwise ship a stale build code.
 
 ## Security checklist
 

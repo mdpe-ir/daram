@@ -1,0 +1,19 @@
+{
+  "name": "dismiss_sms_suggestion",
+  "description": "یک پیشنهاد پیامکی را رد می‌کند و آن را از فهرست بازبینی خارج می‌کند. فقط وقتی کاربر صریحاً گفت همان پیشنهاد را رد کن این ابزار را صدا بزن؛ پیام مبهم تأیید رد نیست. اگر کاربر گفت این نوع پیامک اصلاً تراکنش نیست، ignore_pattern را true بگذار تا قالب مشابه هم کنار گذاشته شود. این ابزار فقط روی پیشنهادی کار می‌کند که قبلاً در گفتگو نمایش داده شده باشد.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "suggestion_id": {
+        "type": "string",
+        "description": "شناسه دقیق پیشنهاد از خروجی review_sms_suggestions. هرگز شناسه نساز."
+      },
+      "ignore_pattern": {
+        "type": "boolean",
+        "description": "اگر true باشد، قالب مشابه از همان سرشماره هم دیگر پیشنهاد نمی‌شود."
+      }
+    },
+    "required": ["suggestion_id"],
+    "additionalProperties": false
+  }
+}

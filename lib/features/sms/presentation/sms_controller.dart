@@ -22,6 +22,12 @@ final smsDraftsProvider = StreamProvider<List<SmsSuggestionRow>>(
   (ref) => ref.watch(smsReviewRepositoryProvider).watchOpen(),
 );
 
+/// Live view of one suggestion, used by the review cards inside chat.
+final smsSuggestionProvider = StreamProvider.autoDispose
+    .family<SmsSuggestionRow?, String>(
+      (ref, id) => ref.watch(smsReviewRepositoryProvider).watch(id),
+    );
+
 final smsControllerProvider = NotifierProvider<SmsController, SmsState>(
   SmsController.new,
 );
@@ -45,6 +51,7 @@ class SmsState {
 class SmsController extends Notifier<SmsState> {
   Timer? _timer;
   bool _again = false;
+  final _dismissedDuringScan = <String>{};
 
   @override
   SmsState build() {
@@ -87,6 +94,21 @@ class SmsController extends Notifier<SmsState> {
     if (enabled) unawaited(refresh());
   }
 
+  Future<void> dismissSender(String sender) async {
+    await ref.read(smsReviewRepositoryProvider).dismissSender(sender);
+    if (!ref.mounted) return;
+    if (state.scanning) _dismissedDuringScan.add(sender);
+    state = SmsState(
+      enabled: state.enabled,
+      aiEnabled: state.aiEnabled,
+      scanning: state.scanning,
+      error: state.error,
+      candidates: state.candidates
+          .where((item) => item.sender != sender)
+          .toList(),
+    );
+  }
+
   Future<void> refresh() async {
     if (!SmsInbox.supported || !state.enabled) return;
     if (state.scanning) {
@@ -105,6 +127,7 @@ class SmsController extends Notifier<SmsState> {
       final inbox = ref.read(smsInboxProvider);
       if (!await inbox.hasPermission()) {
         await inbox.observe(null);
+        candidates = const [];
         error = 'دسترسی پیامک را در تنظیمات اندروید فعال کن.';
         return;
       }
@@ -149,9 +172,16 @@ class SmsController extends Notifier<SmsState> {
         state = SmsState(
           enabled: state.enabled,
           aiEnabled: state.aiEnabled,
-          candidates: state.enabled ? candidates : const [],
+          candidates: state.enabled
+              ? candidates
+                    .where(
+                      (item) => !_dismissedDuringScan.contains(item.sender),
+                    )
+                    .toList()
+              : const [],
           error: state.enabled ? error : null,
         );
+        _dismissedDuringScan.clear();
         if (_again) {
           _again = false;
           unawaited(refresh());

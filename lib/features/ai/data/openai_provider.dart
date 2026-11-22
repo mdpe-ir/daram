@@ -4,7 +4,10 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../domain/ai_models.dart';
+import '../domain/ai_log.dart';
 import '../domain/ai_provider.dart';
+import 'ai_diagnostics.dart';
+import 'ai_log_store.dart';
 import 'sse.dart';
 
 /// OpenAI-compatible chat completions with SSE streaming and native tools.
@@ -12,15 +15,18 @@ import 'sse.dart';
 /// Supports custom base URLs (including proxies and local servers), custom
 /// model names and configurable timeouts.
 class OpenAICompatibleProvider implements AIProvider {
-  OpenAICompatibleProvider(this._dio);
+  OpenAICompatibleProvider(this._dio, {AILogStore? logs})
+    : _logs = logs ?? AILogStore.silent();
 
   final Dio _dio;
+  final AILogStore _logs;
 
   @override
   Stream<AIStreamEvent> streamChat({
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   }) {
     final controller = StreamController<AIStreamEvent>();
     final cancelToken = CancelToken();
@@ -29,6 +35,9 @@ class OpenAICompatibleProvider implements AIProvider {
     };
 
     Future<void>(() async {
+      final watch = Stopwatch()..start();
+      final endpoint = config.chatEndpoint();
+      final providerLabel = config.provider.label;
       try {
         final body = <String, Object?>{
           'model': config.model,
@@ -53,24 +62,39 @@ class OpenAICompatibleProvider implements AIProvider {
         }
 
         final response = await _dio.post<ResponseBody>(
-          config.chatEndpoint(),
+          endpoint,
           data: body,
           cancelToken: cancelToken,
           options: Options(
             responseType: ResponseType.stream,
-            headers: {
-              'Authorization': 'Bearer ${config.apiKey}',
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-            },
+            headers: _headers(config, stream: true, sessionId: sessionId),
             receiveTimeout: Duration(seconds: config.timeoutSeconds),
             sendTimeout: const Duration(seconds: 30),
             validateStatus: (status) => status != null && status < 500,
           ),
         );
 
+        _logs.info(
+          'پاسخ سرویس‌دهنده (${response.statusCode})',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          statusCode: response.statusCode,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint\nstream: true',
+        );
+
         if (response.statusCode != 200) {
           final detail = await _readErrorBody(response.data);
+          _logs.error(
+            'سرویس‌دهنده درخواست را نپذیرفت (${response.statusCode})',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            statusCode: response.statusCode,
+            durationMs: watch.elapsedMilliseconds,
+            detail: 'endpoint: $endpoint\n$detail',
+          );
           controller.add(
             AIStreamError(
               persianAIError(detail, statusCode: response.statusCode),
@@ -91,7 +115,17 @@ class OpenAICompatibleProvider implements AIProvider {
           final error = decoded['error'];
           if (error is Map) {
             sawError = true;
-            controller.add(AIStreamError(_errorMessage(error)));
+            final message = _errorMessage(error);
+            _logs.error(
+              'خطای سرویس‌دهنده در جریان پاسخ',
+              area: AILogArea.network,
+              provider: providerLabel,
+              model: config.model,
+              statusCode: response.statusCode,
+              durationMs: watch.elapsedMilliseconds,
+              detail: 'endpoint: $endpoint\nmessage: $message',
+            );
+            controller.add(AIStreamError(message));
             break;
           }
           final choices = decoded['choices'];
@@ -115,14 +149,52 @@ class OpenAICompatibleProvider implements AIProvider {
           final calls = accumulator.build();
           if (calls.isNotEmpty) controller.add(AIStreamToolCalls(calls));
           controller.add(AIStreamDone(finishReason: finishReason));
+          _logs.info(
+            'جریان پاسخ کامل شد',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            statusCode: response.statusCode,
+            durationMs: watch.elapsedMilliseconds,
+            detail:
+                'endpoint: $endpoint\nfinishReason: ${finishReason ?? '-'}\n'
+                'toolCalls: ${calls.length}',
+          );
         }
       } on DioException catch (error) {
-        if (CancelToken.isCancel(error)) return;
+        if (CancelToken.isCancel(error)) {
+          _logs.info(
+            'درخواست دستیار لغو شد',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            durationMs: watch.elapsedMilliseconds,
+            detail: 'endpoint: $endpoint',
+          );
+          return;
+        }
         final status = error.response?.statusCode;
+        _logs.error(
+          'خطای شبکه: ${dioErrorTypeLabel(error.type)}',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          statusCode: status,
+          durationMs: watch.elapsedMilliseconds,
+          detail: describeDioException(error),
+        );
         controller.add(
           AIStreamError(persianAIError(error, statusCode: status)),
         );
       } on Object catch (error) {
+        _logs.error(
+          'خطا در پردازش پاسخ سرویس‌دهنده',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint\n${error.toString()}',
+        );
         controller.add(AIStreamError(persianAIError(error)));
       } finally {
         if (!controller.isClosed) await controller.close();
@@ -132,11 +204,33 @@ class OpenAICompatibleProvider implements AIProvider {
     return controller.stream;
   }
 
+  /// Headers shared by the streaming and connection-test requests.
+  Map<String, String> _headers(
+    AIConfig config, {
+    required bool stream,
+    String? sessionId,
+  }) {
+    final headers = <String, String>{
+      'Authorization': 'Bearer ${config.apiKey}',
+      'Content-Type': 'application/json',
+      if (stream) 'Accept': 'text/event-stream',
+    };
+    if (config.provider.isOpenCode) {
+      // OpenCode routes/caches by conversation when this header is stable.
+      final raw = sessionId?.trim();
+      final id = raw == null || raw.isEmpty ? 'daram' : raw;
+      headers['x-opencode-session'] = id.startsWith('ses_') ? id : 'ses_$id';
+    }
+    return headers;
+  }
+
   @override
   Future<AIConnectionResult> testConnection(AIConfig config) async {
+    final watch = Stopwatch()..start();
+    final endpoint = config.chatEndpoint();
     try {
       final response = await _dio.post<dynamic>(
-        config.chatEndpoint(),
+        endpoint,
         data: {
           'model': config.model,
           'messages': [
@@ -145,29 +239,53 @@ class OpenAICompatibleProvider implements AIProvider {
           'max_tokens': 5,
         },
         options: Options(
-          headers: {
-            'Authorization': 'Bearer ${config.apiKey}',
-            'Content-Type': 'application/json',
-          },
+          headers: _headers(config, stream: false),
           receiveTimeout: Duration(seconds: config.timeoutSeconds),
           sendTimeout: const Duration(seconds: 30),
           validateStatus: (status) => status != null,
         ),
       );
       if (response.statusCode == 200) {
+        _logs.info(
+          'تست اتصال موفق بود',
+          area: AILogArea.network,
+          provider: config.provider.label,
+          model: config.model,
+          statusCode: response.statusCode,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint',
+        );
         return const AIConnectionResult.success(
           'اتصال برقرار است و مدل پاسخ داد.',
         );
       }
-      return AIConnectionResult.failure(
-        persianAIError(
-          response.data ?? 'error',
-          statusCode: response.statusCode,
-        ),
+      final message = persianAIError(
+        response.data ?? 'error',
+        statusCode: response.statusCode,
       );
+      _logs.warning(
+        'تست اتصال ناموفق بود (${response.statusCode})',
+        area: AILogArea.network,
+        provider: config.provider.label,
+        model: config.model,
+        statusCode: response.statusCode,
+        durationMs: watch.elapsedMilliseconds,
+        detail: 'endpoint: $endpoint\n$message',
+      );
+      return AIConnectionResult.failure(message);
     } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      _logs.error(
+        'تست اتصال ناموفق بود: ${dioErrorTypeLabel(error.type)}',
+        area: AILogArea.network,
+        provider: config.provider.label,
+        model: config.model,
+        statusCode: status,
+        durationMs: watch.elapsedMilliseconds,
+        detail: describeDioException(error),
+      );
       return AIConnectionResult.failure(
-        persianAIError(error, statusCode: error.response?.statusCode),
+        persianAIError(error, statusCode: status),
       );
     }
   }

@@ -108,28 +108,32 @@ Open **تنظیمات → دستیار هوشمند** and fill in:
 
 | Field | Examples |
 |---|---|
-| Provider | OpenAI-compatible / Anthropic / Gemini |
-| Base URL | `https://api.openai.com/v1`, `https://openrouter.ai/api/v1`, `https://api.anthropic.com`, `https://generativelanguage.googleapis.com` |
-| Model | `gpt-4o-mini`, `claude-sonnet-4-5`, `gemini-2.5-flash`, or any model you have access to |
-| API Key | your own key |
+| Provider | OpenAI-compatible / Anthropic / Gemini / **OpenCode** / **OpenCode Go** |
+| Base URL | `https://api.openai.com/v1`, `https://openrouter.ai/api/v1`, `https://api.anthropic.com`, `https://generativelanguage.googleapis.com`, `https://opencode.ai/inference/openai/v1`, `https://opencode.ai/inference/go/openai/v1` |
+| Model | `gpt-4o-mini`, `claude-sonnet-4-5`, `gemini-2.5-flash`, `glm-5.3` (OpenCode), `kimi-k3` (Go), or use the live catalog button |
+| API Key | your own key; OpenCode keys start with `oc_sk_` |
 | Tool mode | native function calling, or strict JSON for models without tools |
 | Timeout | 30–180 seconds |
 
 Press **تست اتصال** to perform a real minimal completion. The status is shown inline in Persian.
 
+**OpenCode / OpenCode Go** ask only for the API key: the vendor's endpoint is applied automatically, and the model selector reads the live catalog (the provider default is used until you change it). The API key is stored per provider, so switching providers asks for that provider's own key instead of reusing the previous one.
+
 Notes:
 
-- **The key never leaves secure storage.** It is not written to preferences, logs, backups, or the database.
+- **The key never leaves secure storage.** It is not written to preferences, logs, backups, or the database. Keys are scoped per provider.
 - Requests go **only** to the endpoint you configure. There is no DARAM backend, no telemetry, no Firebase, no Google services.
 - Only the minimum context is sent per request: system prompt, recent conversation, account names/balances, categories and loan summaries. The full database is never uploaded.
 - Android blocks cleartext HTTP by default. Use an HTTPS endpoint (a local HTTPS proxy works).
 - If the provider does not support tool calling, choose **JSON** mode. Responses are validated; malformed JSON is retried once and then surfaced as a clear error.
+- **OpenCode / OpenCode Go:** create an `oc_sk_...` key in [OpenCode Console](https://opencode.ai/console) (**Account → Personal API keys**). OpenCode draws from Console credit; Go requires a Go, Go Plus or Go Teams subscription. The model selector reads the live catalog (`/inference/v1/models` or `/inference/go/v1/models`) and flags models without native tool support. DARAM sends the documented `x-opencode-session` header and a stable user agent; Go is intended for coding-agent traffic, and model/region availability and per-model data retention are set by OpenCode.
+- **Diagnostics:** **تنظیمات → گزارش‌های دستیار** keeps the last 250 assistant events on the device (provider, model, status code, latency, network error type and a short server message). API keys, request headers and the full conversation are never logged. Tap a row to expand the technical detail, copy the list, or clear it. This is the first place to look when the assistant returns an empty answer or times out.
 
 ## 5. Privacy model
 
 1. **Local-only financial data.** SQLite on the device. No account, no registration, no cloud sync, no analytics SDK.
 2. **AI is optional.** Without a configured provider you can still use every local feature: accounts, transactions, transfers, loans, reports, exports and backups.
-3. **Optional SMS access on Android.** DARAM reads the inbox on-device after permission. The optional SMS AI switch sends masked financial templates from linked senders and relevant receipt context to the configured provider. OTPs and raw inbox messages stay on the device.
+3. **Optional SMS access on Android.** DARAM reads the inbox on-device after permission. The optional SMS AI switch sends masked financial templates from linked senders and relevant receipt context to the configured provider. OTPs and raw inbox messages stay on the device. When you ask the assistant to review SMS suggestions, only the parsed fields (amount, type, account, category, date, description and sender) are sent for that conversation — never the raw SMS body.
 4. **Explicit consent before writes.** A draft is never a record. Confirmation is always a separate, user-initiated action.
 5. **Auditability.** Every committed operation is recorded in `financial_operations`; safe operations can be reversed.
 
@@ -377,7 +381,7 @@ python3 -m http.server 8080 --directory build/web
 - **iOS is configured but was not built here** (no macOS/Xcode in the environment). Android, Linux and web are verified.
 - **Web-specific limits:** browser AI calls are subject to provider CORS; token streaming is buffered; the API key needs HTTPS or localhost; browser storage is cleared with site data. Use the Android/Linux build when a provider blocks CORS.
 - **Linux-specific limits:** saving the API key requires a running keyring (GNOME Keyring/KWallet); export/import needs `zenity` or `qarma`.
-- **SMS review is Android-only.** In each account, open **انتخاب سرشماره‌ها** and select its senders from the inbox. New messages are checked while the app is running and caught up on reopen. Initial import can include the previous 30 days. Use **بازبینی پیامک‌ها** in chat or Settings to edit, confirm, or dismiss suggestions. The optional AI switch learns unfamiliar templates with your configured provider.
+- **SMS review is Android-only.** In each account, open **انتخاب سرشماره‌ها** and select its senders from the inbox. New messages are checked while the app is running and caught up on reopen. Initial import can include the previous 30 days. Use **بازبینی پیامک‌ها** in chat or Settings, or ask the assistant in the chat itself: pending suggestions appear as one compact panel. Tap **پاسخ** on a row to write an instruction about that suggestion, or tap **انتخاب** and pick several rows for one group command. The assistant receives the exact suggestion ids and can confirm, edit or dismiss them; the manual confirm/edit/reject actions remain available from each row's details. Editing a draft is allowed while reviewing, but confirmation and rejection still require the suggestion to have been shown in that conversation. Edited drafts are marked and survive later inbox rescans. The optional AI switch learns unfamiliar templates with your configured provider.
 - **AI quality depends on the chosen model.** Tool-calling models are strongly preferred; JSON mode is a fallback, not an equal experience.
 - **Bank catalog:** names follow public Iranian banking/neobank lists and may lag regulatory mergers. Users can always add a custom bank or neobank. Fifteen digital banks have a bundled standalone mark; the remaining 11 reuse their parent bank's logo. All marks are trademarks used only for identification.
 - **Transfers cannot be edited in place.** They can be deleted (with confirmation); fee rows are protected from direct edits.
@@ -385,7 +389,7 @@ python3 -m http.server 8080 --directory build/web
 - **Loan model:** equal installments; remainder on the last; total interest split evenly; no amortization schedule or interest-rate calculation. Interest is tracked on the loan, not auto-booked as an expense.
 - **Date ambiguity:** a missing year is resolved to the nearest past occurrence and flagged on the draft; a missing date is never invented.
 - **Local backup is plaintext JSON** (by design, so it is portable). Users are warned to store it safely. SQLCipher/encrypted backup is Phase 2.
-- **PDF Persian shaping** uses `arabic_reshaper` + `bidi`; complex mixed-direction strings may still need manual review.
+- **PDF Persian shaping** uses `arabic_reshaper` + `bidi`, draws shaped text in visual order, and lays the page/table out RTL with Persian digits. Free-text descriptions that mix Latin and Persian may still need a quick review.
 - **Chat context** is trimmed to the last 24 messages, and read tools are limited (e.g. 100 transactions per call) to keep requests small.
 - **Schema migrations** preserve existing chats and financial records when adding the SMS review tables.
 

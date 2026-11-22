@@ -6,9 +6,11 @@ import 'database_platform_web.dart'
     if (dart.library.io) 'database_platform_io.dart';
 
 import '../../core/domain/enums.dart';
+import '../../features/assets/domain/asset_quantity.dart';
 import 'tables/chat_tables.dart';
 import 'tables/financial_tables.dart';
 import 'tables/sms_tables.dart';
+import 'tables/portfolio_tables.dart';
 
 part 'app_database.g.dart';
 
@@ -33,6 +35,10 @@ part 'app_database.g.dart';
     SmsSenderLinks,
     SmsSuggestions,
     SmsPatterns,
+    SmsSenderDismissals,
+    Obligations,
+    ObligationPayments,
+    AssetHoldings,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -65,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   factory AppDatabase.memory() => AppDatabase(createMemoryExecutor());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -80,6 +86,32 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(smsSenderLinks);
         await migrator.createTable(smsSuggestions);
         await migrator.createTable(smsPatterns);
+      }
+      if (from < 4) {
+        await transaction(() async {
+          await migrator.createTable(smsSenderDismissals);
+          await migrator.createTable(obligations);
+          await migrator.createTable(obligationPayments);
+          await migrator.createTable(assetHoldings);
+          await migrator.createIndex(idxObligationPaymentsParent);
+        });
+      }
+      if (from < 5) {
+        // A v2 database creates smsSuggestions with the current schema above,
+        // so only add the column when the table pre-dates it.
+        final columns = await customSelect('PRAGMA table_info(sms_suggestions)')
+            .get();
+        final hasEditedAt = columns.any(
+          (row) => row.read<String>('name') == 'edited_at',
+        );
+        if (!hasEditedAt) {
+          await migrator.addColumn(smsSuggestions, smsSuggestions.editedAt);
+        }
+      }
+      if (from < 6) {
+        // Crypto holdings reuse `currency_code`; the v4 CHECK only accepted
+        // gold/silver/currency, so the table is rebuilt with the new rule.
+        await migrator.alterTable(TableMigration(assetHoldings));
       }
     },
     beforeOpen: (details) async {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:daram/core/domain/enums.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:daram/core/money/currency.dart';
 import 'package:daram/core/money/rial.dart';
 import 'package:daram/core/time/calendar_date.dart';
@@ -11,8 +12,11 @@ import 'package:daram/features/ai/data/tool_executor.dart';
 import 'package:daram/features/ai/data/tool_registry.dart';
 import 'package:daram/features/ai/domain/ai_models.dart';
 import 'package:daram/features/categories/data/category_repository.dart';
+import 'package:daram/features/chat/data/chat_repository.dart';
+import 'package:daram/features/chat/domain/drafts.dart';
 import 'package:daram/features/dashboard/data/analytics_repository.dart';
 import 'package:daram/features/loans/data/loan_repository.dart';
+import 'package:daram/features/sms/data/sms_review_repository.dart';
 import 'package:daram/features/transactions/data/operation_repository.dart';
 import 'package:daram/features/transactions/data/transaction_repository.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +28,8 @@ void main() {
   late AppDatabase db;
   late ToolExecutor executor;
   late AccountRepository accounts;
+  late SmsReviewRepository sms;
+  late ChatRepository chat;
 
   setUp(() async {
     db = AppDatabase.memory();
@@ -43,6 +49,8 @@ void main() {
     );
     final analytics = AnalyticsRepository(db, accounts, transactions, loans);
     final registry = await ToolRegistry.load(rootBundle);
+    sms = SmsReviewRepository(db, transactions);
+    chat = ChatRepository(db);
     executor = ToolExecutor(
       registry: registry,
       accounts: accounts,
@@ -50,6 +58,8 @@ void main() {
       transactions: transactions,
       loans: loans,
       analytics: analytics,
+      sms: sms,
+      chat: chat,
       parser: ArgumentParser(today: CalendarDate(2026, 11, 6)),
     );
   });
@@ -62,6 +72,64 @@ void main() {
         sessionId: 'session-1',
         defaultCurrency: CurrencyUnit.toman,
       );
+
+  Future<String> seedSms({
+    String id = 'sms-1',
+    String status = 'pending',
+    int amountRial = 2000000,
+    String description = 'پارکینگ',
+    String template = 'برداشت: [n0] ریال',
+  }) async {
+    final account = (await accounts.list()).first;
+    final hasAmount = amountRial > 0;
+    final draft = TransactionDraft(
+      type: TransactionType.expense,
+      amountRial: Rial(amountRial),
+      accountId: hasAmount ? account.id : '',
+      accountName: hasAmount ? account.accountName : '',
+      categoryId: hasAmount ? 'cat_food' : null,
+      categoryName: hasAmount ? 'خوراک و رستوران' : null,
+      date: CalendarDate(2026, 11, 6),
+      description: description,
+    );
+    await db
+        .into(db.smsSuggestions)
+        .insert(
+          SmsSuggestionsCompanion.insert(
+            id: id,
+            sender: '1001',
+            receivedAt: DateTime.utc(2026, 11, 6, 10),
+            template: template,
+            payload: jsonEncode(draft.toPayload()),
+            status: Value(status),
+          ),
+        );
+    return id;
+  }
+
+  Future<String> presentSms(String suggestionId) async {
+    final session = await chat.createSession(title: 'sms');
+    await chat.addMessage(
+      sessionId: session.id,
+      role: ChatRole.assistant,
+      content: 'این پیشنهاد پیامکی را ببین.',
+      type: ChatMessageType.text,
+      metadata: {
+        'smsSuggestionIds': [suggestionId],
+      },
+    );
+    return session.id;
+  }
+
+  Future<ToolExecution> runSms(
+    String sessionId,
+    String name,
+    Map<String, Object?> args,
+  ) => executor.execute(
+    ToolCall(id: 'sms-call', name: name, arguments: args),
+    sessionId: sessionId,
+    defaultCurrency: CurrencyUnit.toman,
+  );
 
   test(
     'agent manages categories immediately and rejects duplicate rename',
@@ -111,6 +179,69 @@ void main() {
       });
       expect(deleted.ok, isTrue);
       expect(await CategoryRepository(db).findById(id), isNull);
+    },
+  );
+
+  test('category creation picks a fitting style when omitted', () async {
+    final coffee = await run('manage_category', {
+      'action': 'create',
+      'type': 'expense',
+      'name': 'قهوه',
+    });
+    final coffeeContent = jsonDecode(coffee.content) as Map;
+    expect(coffeeContent['icon'], 'coffee');
+    expect(coffeeContent['color_hex'], '#F97316');
+
+    final gym = await run('manage_category', {
+      'action': 'create',
+      'type': 'expense',
+      'name': 'باشگاه ورزشی',
+    });
+    final gymContent = jsonDecode(gym.content) as Map;
+    expect(gymContent['icon'], 'dumbbell');
+    expect(gymContent['color_hex'], '#14B8A6');
+
+    final travel = await run('manage_category', {
+      'action': 'create',
+      'type': 'expense',
+      'name': 'سفر خارجی',
+      'icon': 'tag',
+      'color_hex': '#8B5CF6',
+    });
+    final travelContent = jsonDecode(travel.content) as Map;
+    expect(travelContent['icon'], 'plane');
+    expect(travelContent['color_hex'], '#06B6D4');
+    expect(
+      await CategoryRepository(db)
+          .findById(coffeeContent['category_id'] as String),
+      isNotNull,
+    );
+  });
+
+  test(
+    'renaming can replace generic tag/purple with a fitting style',
+    () async {
+      final created = await run('manage_category', {
+        'action': 'create',
+        'type': 'expense',
+        'name': 'دسته من',
+        'icon': 'tag',
+        'color_hex': '#8B5CF6',
+      });
+      final createdContent = jsonDecode(created.content) as Map;
+      final id = createdContent['category_id'] as String;
+
+      final renamed = await run('manage_category', {
+        'action': 'rename',
+        'type': 'expense',
+        'category_id': id,
+        'name': 'قهوه',
+        'icon': 'tag',
+        'color_hex': '#8B5CF6',
+      });
+      final renamedContent = jsonDecode(renamed.content) as Map;
+      expect(renamedContent['icon'], 'coffee');
+      expect(renamedContent['color_hex'], '#F97316');
     },
   );
 
@@ -247,6 +378,11 @@ void main() {
     final totals = content['totals']! as Map<String, Object?>;
     expect(totals['expense_rial'], 2000000);
     expect(totals['count'], 1);
+    final range = content['date_range'] as Map;
+    expect(range['label_numeric_fa'], '۱۴۰۵/۰۸/۱۰ تا ۱۴۰۵/۰۹/۰۹');
+    final item = (content['items'] as List).single as Map;
+    expect(item['date_jalali'], '1405/08/15');
+    expect(item['date_label_fa'], '۱۵ آبان ۱۴۰۵');
   });
 
   test(
@@ -289,6 +425,15 @@ void main() {
   );
 
   test('generate_report attaches a serialised report', () async {
+    final transactions = TransactionRepository(db, OperationRepository(db));
+    await transactions.create(
+      type: TransactionType.expense,
+      amount: Rial.fromToman(250000),
+      accountId: (await accounts.list()).first.id,
+      categoryId: 'cat_food',
+      date: CalendarDate(2026, 11, 6),
+      operationId: 'op-report-seed',
+    );
     final result = await run('generate_report', {
       'start_date': '2026-11-01',
       'end_date': '2026-11-30',
@@ -297,5 +442,139 @@ void main() {
     expect(result.ok, isTrue);
     expect(result.report, isNotNull);
     expect(result.report!['summary'], isA<Map>());
+
+    final content = jsonDecode(result.content) as Map;
+    final report = content['report'] as Map;
+    final range = report['date_range'] as Map;
+    expect(range['label_numeric_fa'], '۱۴۰۵/۰۸/۱۰ تا ۱۴۰۵/۰۹/۰۹');
+    expect(range['label_fa'], '۱۰ آبان ۱۴۰۵ تا ۹ آذر ۱۴۰۵');
+    expect(report['income_display'], '۰ تومان');
+    expect(report['expense_display'], '۲۵۰,۰۰۰ تومان');
+    expect('${report['net_display']}', contains('۲۵۰,۰۰۰'));
+    final category = (report['categories'] as List).single as Map;
+    expect(category['amount_display'], '۲۵۰,۰۰۰ تومان');
+    expect(category['share_display'], '۱۰۰٪');
+  });
+
+  test('review_sms_suggestions returns cards and exact ids', () async {
+    final id = await seedSms();
+    final result = await run('review_sms_suggestions', {});
+    expect(result.ok, isTrue);
+    expect(result.smsSuggestionIds, [id]);
+    final content = jsonDecode(result.content) as Map;
+    expect(content['count'], 1);
+    final item = (content['suggestions'] as List).single as Map;
+    expect(item['suggestion_id'], id);
+    expect(item['amount_rial'], 2000000);
+    expect(item['amount_display'], '۲۰۰,۰۰۰ تومان');
+    expect(item['ready_to_confirm'], isTrue);
+    expect(item['date_jalali'], '15 آبان 1405');
+  });
+
+  test('SMS decisions are rejected until the suggestion was shown', () async {
+    final id = await seedSms();
+    final session = await chat.createSession(title: 'no history');
+    final result = await runSms(session.id, 'confirm_sms_suggestion', {
+      'suggestion_id': id,
+    });
+    expect(result.ok, isFalse);
+    expect(result.content, contains('نمایش داده نشده'));
+    expect(await db.select(db.transactions).get(), isEmpty);
+  });
+
+  test(
+    'edit_sms_suggestion can update before the suggestion is shown',
+    () async {
+      final id = await seedSms(status: 'needsReview', amountRial: 0);
+      final session = await chat.createSession(title: 'edit first');
+      final edited = await runSms(session.id, 'edit_sms_suggestion', {
+        'suggestion_id': id,
+        'amount': 250000,
+        'amount_unit': 'toman',
+        'account': 'ملت',
+        'category': 'حمل‌ونقل',
+        'description': 'تاکسی',
+      });
+      expect(edited.ok, isTrue);
+      final row = (await sms.find(id))!;
+      expect(row.status, 'pending');
+      expect(row.editedAt, isNotNull);
+
+      // Editing is not a financial write, but confirming still requires the
+      // suggestion to have been shown in the conversation.
+      final confirm = await runSms(session.id, 'confirm_sms_suggestion', {
+        'suggestion_id': id,
+      });
+      expect(confirm.ok, isFalse);
+      expect(confirm.content, contains('نمایش داده نشده'));
+      expect(await db.select(db.transactions).get(), isEmpty);
+    },
+  );
+
+  test('confirm_sms_suggestion records the shown suggestion', () async {
+    final id = await seedSms();
+    final session = await presentSms(id);
+    final result = await runSms(session, 'confirm_sms_suggestion', {
+      'suggestion_id': id,
+    });
+    expect(result.ok, isTrue);
+    final rows = await db.select(db.transactions).get();
+    expect(rows.single.amountRial, 2000000);
+    expect(rows.single.operationId, 'sms:$id');
+    expect((await sms.find(id))!.status, 'confirmed');
+  });
+
+  test('edit_sms_suggestion makes a needsReview row confirmable', () async {
+    final id = await seedSms(status: 'needsReview', amountRial: 0);
+    final session = await presentSms(id);
+    final edited = await runSms(session, 'edit_sms_suggestion', {
+      'suggestion_id': id,
+      'amount': 250000,
+      'amount_unit': 'toman',
+      'account': 'ملت',
+      'category': 'حمل‌ونقل',
+      'date': '2026-11-05',
+      'description': 'تاکسی',
+    });
+    expect(edited.ok, isTrue);
+    final row = (await sms.find(id))!;
+    expect(row.status, 'pending');
+    expect(row.editedAt, isNotNull);
+    final draft = SmsReviewRepository.draftOf(row);
+    expect(draft.amountRial, Rial.fromToman(250000));
+    expect(draft.accountId, isNotEmpty);
+    expect(draft.categoryId, 'cat_transport');
+    expect(draft.description, 'تاکسی');
+    expect(draft.date, CalendarDate(2026, 11, 5));
+
+    final confirmed = await runSms(session, 'confirm_sms_suggestion', {
+      'suggestion_id': id,
+    });
+    expect(confirmed.ok, isTrue);
+    expect((await sms.find(id))!.status, 'confirmed');
+  });
+
+  test('dismiss_sms_suggestion can ignore the whole template', () async {
+    final first = await seedSms();
+    final second = await seedSms(id: 'sms-2');
+    final session = await presentSms(first);
+    final result = await runSms(session, 'dismiss_sms_suggestion', {
+      'suggestion_id': first,
+      'ignore_pattern': true,
+    });
+    expect(result.ok, isTrue);
+    expect((await sms.find(first))!.status, 'dismissed');
+    expect((await sms.find(second))!.status, 'dismissed');
+  });
+
+  test('confirm_sms_suggestion refuses an incomplete draft', () async {
+    final id = await seedSms(status: 'needsReview', amountRial: 0);
+    final session = await presentSms(id);
+    final result = await runSms(session, 'confirm_sms_suggestion', {
+      'suggestion_id': id,
+    });
+    expect(result.ok, isFalse);
+    expect(result.content, contains('مبلغ'));
+    expect(await db.select(db.transactions).get(), isEmpty);
   });
 }

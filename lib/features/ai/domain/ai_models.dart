@@ -19,6 +19,18 @@ enum AIProviderKind {
     defaultBaseUrl: 'https://generativelanguage.googleapis.com',
     defaultModel: 'gemini-2.5-flash',
     supportsNativeTools: true,
+  ),
+  openCode(
+    label: 'OpenCode',
+    defaultBaseUrl: 'https://opencode.ai/inference/openai/v1',
+    defaultModel: 'glm-5.3',
+    supportsNativeTools: true,
+  ),
+  openCodeGo(
+    label: 'OpenCode Go',
+    defaultBaseUrl: 'https://opencode.ai/inference/go/openai/v1',
+    defaultModel: 'kimi-k3',
+    supportsNativeTools: true,
   );
 
   const AIProviderKind({
@@ -32,6 +44,15 @@ enum AIProviderKind {
   final String defaultBaseUrl;
   final String defaultModel;
   final bool supportsNativeTools;
+
+  /// Both OpenCode plans share the OpenAI-compatible gateway shape and require
+  /// the `x-opencode-session` header.
+  bool get isOpenCode =>
+      this == AIProviderKind.openCode || this == AIProviderKind.openCodeGo;
+
+  /// OpenCode owns the endpoint and the model catalog, so the settings screen
+  /// only needs the key (and an optional model choice) from the user.
+  bool get usesManagedEndpoint => isOpenCode;
 
   static AIProviderKind fromStorage(String value) =>
       AIProviderKind.values.firstWhere(
@@ -122,10 +143,16 @@ final class AIConfig {
   /// The endpoint used for chat completions, with no duplicated path segments.
   String chatEndpoint() => _join(baseUrl, _chatPath);
 
-  String modelsEndpoint() => _join(baseUrl, _modelsPath);
+  String modelsEndpoint() => switch (provider) {
+    AIProviderKind.openCode => 'https://opencode.ai/inference/v1/models',
+    AIProviderKind.openCodeGo => 'https://opencode.ai/inference/go/v1/models',
+    _ => _join(baseUrl, _modelsPath),
+  };
 
   String get _chatPath => switch (provider) {
-    AIProviderKind.openAICompatible => 'chat/completions',
+    AIProviderKind.openAICompatible ||
+    AIProviderKind.openCode ||
+    AIProviderKind.openCodeGo => 'chat/completions',
     AIProviderKind.anthropic => 'v1/messages',
     AIProviderKind.gemini => 'v1beta/models/$model:streamGenerateContent',
   };
@@ -134,6 +161,7 @@ final class AIConfig {
     AIProviderKind.openAICompatible => 'models',
     AIProviderKind.anthropic => 'v1/models',
     AIProviderKind.gemini => 'v1beta/models',
+    AIProviderKind.openCode || AIProviderKind.openCodeGo => 'models',
   };
 
   static String _join(String baseUrl, String path) {

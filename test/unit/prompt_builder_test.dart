@@ -29,6 +29,11 @@ void main() {
       }
       expect(prompt, contains('manage_category'));
       expect(prompt, contains('coffee'));
+      expect(prompt, contains('#F97316'));
+      expect(prompt, contains('نارنجی'));
+      expect(prompt, contains('پالت رنگ'));
+      expect(prompt, contains('label_fa'));
+      expect(prompt, contains('شمسی'));
       // Every placeholder must be resolved before the prompt is sent.
       expect(prompt, isNot(contains('{{')));
     },

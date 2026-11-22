@@ -31,6 +31,10 @@ class ToolRegistry {
     'assets/ai/tools/mark_installment_paid.json',
     'assets/ai/tools/query_transactions.json',
     'assets/ai/tools/generate_report.json',
+    'assets/ai/tools/review_sms_suggestions.json',
+    'assets/ai/tools/confirm_sms_suggestion.json',
+    'assets/ai/tools/edit_sms_suggestion.json',
+    'assets/ai/tools/dismiss_sms_suggestion.json',
   ];
 
   List<ToolDefinition> get definitions => _definitions;

@@ -1,6 +1,21 @@
 import '../money/currency.dart';
 import '../money/rial.dart';
 
+/// Normalizes Persian/Latin text for search: lowercases, drops separators and
+/// ZWNJ, and maps alef/yeh/kaf/teh-marbuta variants to the Persian forms so
+/// «امريكا» matches «آمریکا» and «هنگ کنگ» matches «هنگ‌کنگ».
+String normalizeSearchText(String value) => value
+    .toLowerCase()
+    .replaceAll('‌', '')
+    .replaceAll('آ', 'ا')
+    .replaceAll('أ', 'ا')
+    .replaceAll('إ', 'ا')
+    .replaceAll('ي', 'ی')
+    .replaceAll('ك', 'ک')
+    .replaceAll('ة', 'ه')
+    .replaceAll(RegExp(r'[\s\-_.,()]+'), '')
+    .trim();
+
 /// Centralised Persian/English digit and money formatting helpers.
 ///
 /// All monetary display goes through this class so that the rial/toman rule

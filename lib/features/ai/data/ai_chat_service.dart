@@ -3,8 +3,10 @@ import 'dart:convert';
 import '../../../core/domain/enums.dart';
 import '../../../core/money/currency.dart';
 import '../../chat/domain/chat_models.dart';
+import '../domain/ai_log.dart';
 import '../domain/ai_models.dart';
 import '../domain/tool.dart';
+import 'ai_log_store.dart';
 import 'ai_provider_registry.dart';
 import 'tool_executor.dart';
 import 'tool_registry.dart';
@@ -24,11 +26,15 @@ class ChatRunCompleted extends ChatRunEvent {
     required this.text,
     required this.actions,
     required this.reports,
+    this.smsSuggestionIds = const <String>[],
   });
 
   final String text;
   final List<PendingAction> actions;
   final List<Map<String, Object?>> reports;
+
+  /// SMS suggestions shown during this turn, rendered as cards in chat.
+  final List<String> smsSuggestionIds;
 }
 
 class ChatRunFailed extends ChatRunEvent {
@@ -46,13 +52,16 @@ class AIChatService {
     required AIProviderRegistry providers,
     required ToolRegistry tools,
     required ToolExecutor executor,
+    AILogStore? logs,
   }) : _providers = providers,
        _tools = tools,
-       _executor = executor;
+       _executor = executor,
+       _logs = logs ?? AILogStore.silent();
 
   final AIProviderRegistry _providers;
   final ToolRegistry _tools;
   final ToolExecutor _executor;
+  final AILogStore _logs;
 
   static const int _maxToolRounds = 3;
   static const int _maxHistoryMessages = 24;
@@ -65,8 +74,27 @@ class AIChatService {
     required String sessionId,
     required CurrencyUnit defaultCurrency,
   }) async* {
+    _logs.info(
+      'شروع درخواست دستیار',
+      area: AILogArea.chat,
+      provider: config.provider.label,
+      model: config.model,
+      detail:
+          'endpoint: ${config.chatEndpoint()}\n'
+          'mode: ${config.toolMode.name}\n'
+          'history: ${history.length}\n'
+          'userChars: ${userMessage.length}\n'
+          'tools: ${_tools.definitions.length}',
+    );
     final configurationError = config.validate();
     if (configurationError != null) {
+      _logs.error(
+        'تنظیمات دستیار کامل نیست',
+        area: AILogArea.chat,
+        provider: config.provider.label,
+        model: config.model,
+        detail: configurationError,
+      );
       yield ChatRunFailed(configurationError);
       return;
     }
@@ -105,17 +133,22 @@ class AIChatService {
     final allText = StringBuffer();
     final actions = <PendingAction>[];
     final reports = <Map<String, Object?>>[];
+    final smsIds = <String>{};
     final previousCounts = <String, int>{};
+    final runWatch = Stopwatch()..start();
 
     for (var round = 0; round < _maxToolRounds; round++) {
+      final roundWatch = Stopwatch()..start();
       final roundText = StringBuffer();
       final toolCalls = <ToolCall>[];
       String? failure;
+      String? roundFinishReason;
 
       await for (final event in provider.streamChat(
         config: config,
         messages: messages,
         tools: _tools.definitions,
+        sessionId: sessionId,
       )) {
         switch (event) {
           case AIStreamText(:final text):
@@ -130,12 +163,21 @@ class AIChatService {
           case AIStreamError(:final message):
             failure = message;
             break;
-          case AIStreamDone():
+          case AIStreamDone(:final finishReason):
+            roundFinishReason = finishReason;
             break;
         }
         if (failure != null) break;
       }
       if (failure != null) {
+        _logs.error(
+          'دور ${round + 1} دستیار ناموفق بود',
+          area: AILogArea.chat,
+          provider: config.provider.label,
+          model: config.model,
+          durationMs: roundWatch.elapsedMilliseconds,
+          detail: 'round: ${round + 1}\nmessage: $failure',
+        );
         if (actions.isEmpty && reports.isEmpty) {
           yield ChatRunFailed(failure);
         } else {
@@ -143,21 +185,42 @@ class AIChatService {
             text: 'موارد آماده را بررسی کن. تکمیل پاسخ به مشکل خورد. $failure',
             actions: actions,
             reports: reports,
+            smsSuggestionIds: smsIds.toList(),
           );
         }
         return;
       }
 
       final roundContent = roundText.toString().trim();
+      _logs.info(
+        'پاسخ دور ${round + 1} دریافت شد',
+        area: AILogArea.chat,
+        provider: config.provider.label,
+        model: config.model,
+        durationMs: roundWatch.elapsedMilliseconds,
+        detail:
+            'chars: ${roundContent.length}\n'
+            'finishReason: ${roundFinishReason ?? '-'}\n'
+            'toolCalls: ${toolCalls.length}',
+      );
       if (roundContent.isNotEmpty) {
         if (allText.isNotEmpty) allText.write('\n\n');
         allText.write(roundContent);
       }
       if (toolCalls.isEmpty) {
+        _logTurnResult(
+          config: config,
+          text: allText.toString().trim(),
+          actionCount: actions.length,
+          reportCount: reports.length,
+          rounds: round + 1,
+          durationMs: runWatch.elapsedMilliseconds,
+        );
         yield ChatRunCompleted(
           text: allText.toString().trim(),
           actions: actions,
           reports: reports,
+          smsSuggestionIds: smsIds.toList(),
         );
         return;
       }
@@ -165,10 +228,21 @@ class AIChatService {
       final resultMessages = <AIMessage>[];
       final roundCounts = <String, int>{};
       for (final call in toolCalls) {
+        final toolWatch = Stopwatch()..start();
         final execution = await _executor.execute(
           call,
           sessionId: sessionId,
           defaultCurrency: defaultCurrency,
+        );
+        _logs.record(
+          level: execution.ok ? AILogLevel.info : AILogLevel.warning,
+          area: AILogArea.tool,
+          title: 'اجرای ابزار ${call.name}',
+          provider: config.provider.label,
+          model: config.model,
+          durationMs: toolWatch.elapsedMilliseconds,
+          detail:
+              'ok: ${execution.ok}\n${truncateText(execution.content, 500)}',
         );
         if (execution.pendingAction != null) {
           final action = execution.pendingAction!;
@@ -181,6 +255,7 @@ class AIChatService {
           if (occurrence > (previousCounts[key] ?? 0)) actions.add(action);
         }
         if (execution.report != null) reports.add(execution.report!);
+        smsIds.addAll(execution.smsSuggestionIds);
         resultMessages.add(
           AIMessage.toolResult(
             toolCallId: call.id,
@@ -200,10 +275,27 @@ class AIChatService {
         ..addAll(resultMessages);
     }
 
+    _logs.warning(
+      'حداکثر دور ابزار رسید',
+      area: AILogArea.chat,
+      provider: config.provider.label,
+      model: config.model,
+      durationMs: runWatch.elapsedMilliseconds,
+      detail: 'rounds: $_maxToolRounds\nactions: ${actions.length}',
+    );
+    _logTurnResult(
+      config: config,
+      text: allText.toString().trim(),
+      actionCount: actions.length,
+      reportCount: reports.length,
+      rounds: _maxToolRounds,
+      durationMs: runWatch.elapsedMilliseconds,
+    );
     yield ChatRunCompleted(
       text: allText.toString().trim(),
       actions: actions,
       reports: reports,
+      smsSuggestionIds: smsIds.toList(),
     );
   }
 
@@ -216,6 +308,7 @@ class AIChatService {
     final provider = _providers.forKind(config.provider);
     var attempt = 0;
     var envelope = <String, Object?>{};
+    final runWatch = Stopwatch()..start();
 
     while (attempt < 2) {
       final buffer = StringBuffer();
@@ -224,6 +317,7 @@ class AIChatService {
         config: config,
         messages: messages,
         tools: _tools.definitions,
+        sessionId: sessionId,
       )) {
         switch (event) {
           case AIStreamText(:final text):
@@ -231,6 +325,14 @@ class AIChatService {
           case AIStreamToolCalls():
             break;
           case AIStreamError(:final message):
+            _logs.error(
+              'پاسخ JSON ناموفق بود',
+              area: AILogArea.chat,
+              provider: config.provider.label,
+              model: config.model,
+              durationMs: runWatch.elapsedMilliseconds,
+              detail: 'attempt: ${attempt + 1}\nmessage: $message',
+            );
             yield ChatRunFailed(message);
             failed = true;
           case AIStreamDone():
@@ -244,6 +346,14 @@ class AIChatService {
         envelope = parsed;
         break;
       }
+      _logs.warning(
+        'خروجی مدل JSON معتبر نبود',
+        area: AILogArea.chat,
+        provider: config.provider.label,
+        model: config.model,
+        durationMs: runWatch.elapsedMilliseconds,
+        detail: truncateText(buffer.toString(), 600),
+      );
       attempt++;
       if (attempt >= 2) {
         yield const ChatRunFailed(
@@ -264,6 +374,7 @@ class AIChatService {
     final rawActions = envelope['actions'] ?? envelope['tool_calls'];
     final actions = <PendingAction>[];
     final reports = <Map<String, Object?>>[];
+    final smsIds = <String>{};
     final calls = <ToolCall>[];
 
     if (rawActions is List) {
@@ -287,21 +398,75 @@ class AIChatService {
     }
 
     for (final call in calls) {
+      final toolWatch = Stopwatch()..start();
       final execution = await _executor.execute(
         call,
         sessionId: sessionId,
         defaultCurrency: defaultCurrency,
       );
+      _logs.record(
+        level: execution.ok ? AILogLevel.info : AILogLevel.warning,
+        area: AILogArea.tool,
+        title: 'اجرای ابزار ${call.name}',
+        provider: config.provider.label,
+        model: config.model,
+        durationMs: toolWatch.elapsedMilliseconds,
+        detail: 'ok: ${execution.ok}\n${truncateText(execution.content, 500)}',
+      );
       if (execution.pendingAction != null) {
         actions.add(execution.pendingAction!);
       }
       if (execution.report != null) reports.add(execution.report!);
+      smsIds.addAll(execution.smsSuggestionIds);
     }
 
+    _logTurnResult(
+      config: config,
+      text: text,
+      actionCount: actions.length,
+      reportCount: reports.length,
+      rounds: attempt + 1,
+      durationMs: runWatch.elapsedMilliseconds,
+    );
     yield ChatRunCompleted(
       text: text.isEmpty ? 'پیش‌نویس آماده شد؛ لطفاً بررسی و تأیید کن.' : text,
       actions: actions,
       reports: reports,
+      smsSuggestionIds: smsIds.toList(),
+    );
+  }
+
+  void _logTurnResult({
+    required AIConfig config,
+    required String text,
+    required int actionCount,
+    required int reportCount,
+    required int rounds,
+    required int durationMs,
+  }) {
+    final detail =
+        'chars: ${text.trim().length}\n'
+        'rounds: $rounds\n'
+        'actions: $actionCount\n'
+        'reports: $reportCount';
+    if (text.trim().isEmpty) {
+      _logs.warning(
+        'مدل پاسخ متنی نداد',
+        area: AILogArea.chat,
+        provider: config.provider.label,
+        model: config.model,
+        durationMs: durationMs,
+        detail: detail,
+      );
+      return;
+    }
+    _logs.info(
+      'پاسخ دستیار آماده شد',
+      area: AILogArea.chat,
+      provider: config.provider.label,
+      model: config.model,
+      durationMs: durationMs,
+      detail: detail,
     );
   }
 

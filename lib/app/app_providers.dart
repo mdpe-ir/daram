@@ -1,19 +1,25 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../core/constants/app_info.dart';
 import '../core/money/currency.dart';
 import '../core/services/api_key_store.dart';
 import '../data/database/app_database.dart';
 import '../features/accounts/data/account_repository.dart';
 import '../features/ai/data/ai_chat_service.dart';
+import '../features/ai/data/ai_log_store.dart';
 import '../features/ai/data/ai_provider_registry.dart';
+import '../features/ai/data/open_code_models.dart';
 import '../features/ai/data/prompt_builder.dart';
 import '../features/ai/data/tool_executor.dart';
 import '../features/ai/data/tool_registry.dart';
 import '../features/ai/domain/ai_models.dart';
+import '../features/assets/data/asset_repository.dart';
+import '../features/assets/data/navasan_rates.dart';
 import '../features/categories/data/category_repository.dart';
 import '../features/categories/domain/category.dart';
 import '../features/chat/data/chat_repository.dart';
@@ -21,9 +27,11 @@ import '../features/chat/data/confirmation_service.dart';
 import '../features/chat/data/undo_service.dart';
 import '../features/dashboard/data/analytics_repository.dart';
 import '../features/loans/data/loan_repository.dart';
+import '../features/obligations/data/obligation_repository.dart';
 import '../features/settings/data/export_service.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/settings/domain/app_settings.dart';
+import '../features/sms/data/sms_review_repository.dart';
 import '../features/transactions/data/operation_repository.dart';
 import '../features/transactions/data/transaction_repository.dart';
 import '../features/transactions/data/transfer_repository.dart';
@@ -89,6 +97,14 @@ final loanRepositoryProvider = Provider<LoanRepository>(
   ),
 );
 
+final obligationRepositoryProvider = Provider<ObligationRepository>(
+  (ref) => ObligationRepository(ref.watch(databaseProvider)),
+);
+
+final assetRepositoryProvider = Provider<AssetRepository>(
+  (ref) => AssetRepository(ref.watch(databaseProvider)),
+);
+
 final analyticsRepositoryProvider = Provider<AnalyticsRepository>(
   (ref) => AnalyticsRepository(
     ref.watch(databaseProvider),
@@ -132,7 +148,10 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 30),
-      headers: {'Accept': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        if (!kIsWeb) 'User-Agent': 'DARAM/${AppInfo.version}',
+      },
     ),
   );
   dio.interceptors.add(
@@ -146,8 +165,31 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
+final navasanRatesProvider = Provider<NavasanRates>(
+  (ref) => NavasanRates(ref.watch(dioProvider)),
+);
+
+/// Local, bounded diagnostics used by the settings → logs screen.
+final aiLogStoreProvider = Provider<AILogStore>((ref) {
+  final repository = ref.watch(settingsRepositoryProvider);
+  final store = AILogStore(
+    initial: repository.loadAILogs(),
+    persist: repository.saveAILogs,
+  );
+  ref.onDispose(store.dispose);
+  return store;
+});
+
 final aiProviderRegistryProvider = Provider<AIProviderRegistry>(
-  (ref) => AIProviderRegistry(ref.watch(dioProvider)),
+  (ref) => AIProviderRegistry(
+    ref.watch(dioProvider),
+    logs: ref.watch(aiLogStoreProvider),
+  ),
+);
+
+/// Live OpenCode / OpenCode Go model catalog for the settings picker.
+final openCodeModelsProvider = Provider<OpenCodeModels>(
+  (ref) => OpenCodeModels(ref.watch(dioProvider)),
 );
 
 /// Tool schemas are bundled assets, loaded once.
@@ -169,6 +211,11 @@ final toolExecutorProvider = FutureProvider<ToolExecutor>((ref) async {
     transactions: ref.watch(transactionRepositoryProvider),
     loans: ref.watch(loanRepositoryProvider),
     analytics: ref.watch(analyticsRepositoryProvider),
+    sms: SmsReviewRepository(
+      ref.watch(databaseProvider),
+      ref.watch(transactionRepositoryProvider),
+    ),
+    chat: ref.watch(chatRepositoryProvider),
   );
 });
 
@@ -179,6 +226,7 @@ final aiChatServiceProvider = FutureProvider<AIChatService>((ref) async {
     providers: ref.watch(aiProviderRegistryProvider),
     tools: registry,
     executor: executor,
+    logs: ref.watch(aiLogStoreProvider),
   );
 });
 
@@ -230,12 +278,24 @@ class SettingsController extends AsyncNotifier<AppSettings> {
       keyToStore = config.apiKey.trim();
     }
     await _repository.saveAIConfig(config, apiKey: keyToStore);
-    final hasKey = keyToStore != null || _current.hasApiKey;
-    state = AsyncData(_current.copyWith(aiConfig: config, hasApiKey: hasKey));
+    final storedKey =
+        keyToStore ?? await _repository.readApiKey(config.provider) ?? '';
+    state = AsyncData(
+      _current.copyWith(
+        aiConfig: config.copyWith(apiKey: storedKey),
+        hasApiKey: storedKey.trim().isNotEmpty,
+      ),
+    );
   }
 
-  Future<void> clearApiKey() async {
-    await _repository.clearApiKey();
+  Future<String?> storedApiKey(AIProviderKind provider) =>
+      _repository.readApiKey(provider);
+
+  /// Clears the key of [provider] (the saved provider by default).
+  Future<void> clearApiKey([AIProviderKind? provider]) async {
+    final target = provider ?? _current.aiConfig.provider;
+    await _repository.clearApiKey(target);
+    if (target != _current.aiConfig.provider) return;
     state = AsyncData(
       _current.copyWith(
         hasApiKey: false,

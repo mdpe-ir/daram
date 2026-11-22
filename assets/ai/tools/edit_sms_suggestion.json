@@ -1,0 +1,46 @@
+{
+  "name": "edit_sms_suggestion",
+  "description": "جزئیات پیش‌نویس یک پیشنهاد پیامکی را بدون ثبت نهایی تغییر می‌دهد. وقتی کاربر گفت مبلغ، نوع، حساب، دسته‌بندی، تاریخ یا توضیح پیشنهاد را عوض کن از این ابزار استفاده کن. فقط فیلدهایی را بفرست که کاربر صریحاً گفته است. بعد از ویرایش، تغییرات را کوتاه تأیید کن و برای ثبت نهایی منتظر تأیید صریح کاربر بمان. ویرایش، ثبت مالی نیست و می‌تواند همراه با نمایش فهرست در همان دور انجام شود.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "suggestion_id": {
+        "type": "string",
+        "description": "شناسه دقیق پیشنهاد از خروجی review_sms_suggestions. هرگز شناسه نساز."
+      },
+      "amount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مبلغ جدید به واحد amount_unit. فقط عدد؛ مثلاً 250000 برای ۲۵۰ هزار تومان."
+      },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ جدید. اگر کاربر واحد را نگفت از واحد نمایشی پیش‌فرض استفاده کن."
+      },
+      "type": {
+        "type": "string",
+        "enum": ["income", "expense"],
+        "description": "نوع جدید تراکنش: درآمد یا هزینه."
+      },
+      "account": {
+        "type": "string",
+        "description": "نام یا شناسه حساب موجود که تراکنش باید از آن ثبت شود."
+      },
+      "category": {
+        "type": "string",
+        "description": "نام دسته‌بندی موجود و هم‌نوع با تراکنش."
+      },
+      "date": {
+        "type": "string",
+        "description": "تاریخ جدید تراکنش؛ ISO میلادی، شمسی یا عبارت نسبی مثل «دیروز»."
+      },
+      "description": {
+        "type": "string",
+        "description": "توضیح کوتاه جدید تراکنش. رشته خالی یعنی پاک کردن توضیح."
+      }
+    },
+    "required": ["suggestion_id"],
+    "additionalProperties": false
+  }
+}

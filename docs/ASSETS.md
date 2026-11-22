@@ -9,6 +9,21 @@ DARAM does not load any image, icon or font from the network at runtime. Everyth
 - **License:** SIL Open Font License 1.1. Full text: `assets/fonts/OFL.txt`.
 - **Usage:** the only UI font; weights map to 300/400/500/600/700/800 in `DaramTheme`. Numbers use tabular figures in amount widgets.
 
+## Currency flags
+
+- **Source:** [github.com/HatScripts/circle-flags](https://github.com/HatScripts/circle-flags), circular flag set (`flags/*.svg`).
+- **Files:** `assets/flags/{country}.svg` — 66 files, one per ISO 3166-1 alpha-2 country code referenced by `lib/core/constants/world_currencies.dart`. The EU flag is bundled as `eu.svg` from the upstream `european_union.svg`.
+- **License:** MIT. Full text: `assets/flags/LICENSE.md`.
+- **Usage:** shown as a small circle beside each currency in the asset editor and currency picker. Flags are bundled so the picker works offline; they are not used to imply endorsement or affiliation.
+
+## Cryptocurrency icons
+
+- **Source:** [github.com/spothq/cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons), `svg/color/*.svg`.
+- **Files:** `assets/crypto/{symbol}.svg` — 34 coins (lowercase ticker), used by the crypto picker and holding rows. The catalog lives in `lib/core/constants/crypto_assets.dart`.
+- **License:** CC0 1.0 Universal. Full text: `assets/crypto/LICENSE.md`.
+- **Changes:** in `ada.svg`, `grt.svg` and `mana.svg` the unused SVG filters (drop shadow / colour matrix) were removed because the bundled renderer does not support them; the visible artwork is unchanged.
+- **Usage:** coin logos identify the user's own holdings and remain trademarks of their owners.
+
 ## Iranian bank and neobank logos
 
 ### CC0 bank logos (40)

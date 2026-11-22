@@ -12,7 +12,11 @@ enum DaramTool {
   addLoan('add_loan'),
   markInstallmentPaid('mark_installment_paid'),
   queryTransactions('query_transactions'),
-  generateReport('generate_report');
+  generateReport('generate_report'),
+  reviewSmsSuggestions('review_sms_suggestions'),
+  confirmSmsSuggestion('confirm_sms_suggestion'),
+  editSmsSuggestion('edit_sms_suggestion'),
+  dismissSmsSuggestion('dismiss_sms_suggestion');
 
   const DaramTool(this.toolName);
 
@@ -25,16 +29,33 @@ enum DaramTool {
     return null;
   }
 
-  /// Tools which create a financial draft and therefore require confirmation.
+  /// Tools which change stored data.
+  ///
+  /// Financial draft tools still require a separate confirmation; SMS decision
+  /// tools are only allowed after the user has seen the suggestion in chat.
   bool get isWriteTool => switch (this) {
     DaramTool.addAccount ||
     DaramTool.addTransaction ||
     DaramTool.addTransfer ||
     DaramTool.addLoan ||
-    DaramTool.markInstallmentPaid => true,
+    DaramTool.markInstallmentPaid ||
+    DaramTool.confirmSmsSuggestion ||
+    DaramTool.editSmsSuggestion ||
+    DaramTool.dismissSmsSuggestion => true,
     DaramTool.manageCategory ||
     DaramTool.queryTransactions ||
-    DaramTool.generateReport => false,
+    DaramTool.generateReport ||
+    DaramTool.reviewSmsSuggestions => false,
+  };
+
+  /// Tools which decide the fate of one existing SMS suggestion.
+  ///
+  /// They may only run after that suggestion has been shown in the chat.
+  bool get isSmsDecision => switch (this) {
+    DaramTool.confirmSmsSuggestion ||
+    DaramTool.editSmsSuggestion ||
+    DaramTool.dismissSmsSuggestion => true,
+    _ => false,
   };
 }
 

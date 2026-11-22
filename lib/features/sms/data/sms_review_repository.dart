@@ -54,6 +54,17 @@ class SmsReviewRepository {
 
   Future<List<SmsSenderLink>> links() => _db.select(_db.smsSenderLinks).get();
 
+  Future<Set<String>> dismissedSenders() async => {
+    for (final row in await _db.select(_db.smsSenderDismissals).get())
+      row.sender,
+  };
+
+  Future<void> dismissSender(String sender) async {
+    await _db
+        .into(_db.smsSenderDismissals)
+        .insertOnConflictUpdate(SmsSenderDismissal(sender: sender));
+  }
+
   Future<void> setSenders(
     String accountId,
     Set<String> senders, {
@@ -118,15 +129,71 @@ class SmsReviewRepository {
 
   Stream<List<SmsSuggestionRow>> watchOpen() => _openSuggestions().watch();
 
+  Future<List<SmsSuggestionRow>> open() => _openSuggestions().get();
+
   Future<List<SmsSuggestionRow>> suggestionsSince(DateTime since) =>
       (_db.select(
         _db.smsSuggestions,
       )..where((row) => row.receivedAt.isBiggerOrEqualValue(since))).get();
 
+  /// Finds a suggestion regardless of its status (used by chat cards).
+  Future<SmsSuggestionRow?> find(String id) => (_db.select(
+    _db.smsSuggestions,
+  )..where((row) => row.id.equals(id))).getSingleOrNull();
+
+  /// Watches one suggestion so cards in chat reflect confirm/dismiss instantly.
+  Stream<SmsSuggestionRow?> watch(String id) => (_db.select(
+    _db.smsSuggestions,
+  )..where((row) => row.id.equals(id))).watchSingleOrNull();
+
   static TransactionDraft draftOf(SmsSuggestionRow row) =>
       TransactionDraft.fromPayload(
         jsonDecode(row.payload) as Map<String, Object?>,
       );
+
+  /// Whether a suggestion has every field needed for a one-tap confirmation.
+  static bool isReady(
+    SmsSuggestionRow row, {
+    required Set<String> accountIds,
+    required Set<String> categoryIds,
+  }) {
+    if (row.status != 'pending') return false;
+    final draft = draftOf(row);
+    return draft.accountId.isNotEmpty &&
+        !draft.amountRial.isZero &&
+        accountIds.contains(draft.accountId) &&
+        (draft.categoryId == null || categoryIds.contains(draft.categoryId));
+  }
+
+  /// Applies edits to the draft behind an SMS suggestion without confirming it.
+  ///
+  /// A suggestion that only lacked an amount or account moves back to
+  /// `pending` once both are present, so the user can confirm it normally. The
+  /// duplicate warning is cleared by an explicit edit, matching the SMS screen's
+  /// edit-and-confirm flow.
+  Future<void> updateDraft(String id, TransactionDraft draft) =>
+      _db.transaction(() async {
+        final row = await _getOpen(id);
+        if (row == null) {
+          throw const NotFoundException(
+            'این پیشنهاد پیامکی دیگر در انتظار بازبینی نیست.',
+          );
+        }
+        final ready = draft.accountId.isNotEmpty && !draft.amountRial.isZero;
+        final promotable =
+            row.status == 'needsReview' || row.status == 'possibleDuplicate';
+        await (_db.update(
+          _db.smsSuggestions,
+        )..where((item) => item.id.equals(id))).write(
+          SmsSuggestionsCompanion(
+            payload: Value(jsonEncode(draft.toPayload())),
+            status: promotable && ready
+                ? const Value('pending')
+                : const Value.absent(),
+            editedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+      });
 
   Future<Map<String, Map<String, Object?>>> patterns() async => {
     for (final row in await _db.select(_db.smsPatterns).get())
@@ -174,6 +241,11 @@ class SmsReviewRepository {
         _db.smsSuggestions,
       )..where((row) => row.id.equals(suggestion.id))).getSingleOrNull();
       if (existing != null && !openStatuses.contains(existing.status)) {
+        continue;
+      }
+      if (existing != null && existing.editedAt != null) {
+        // The user or assistant already edited this draft. A later inbox scan
+        // must not silently revert the category/description/amount they saw.
         continue;
       }
       if (suggestion.contextMessageId != null) {

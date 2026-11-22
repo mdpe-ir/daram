@@ -32,6 +32,7 @@ class _ScriptedProvider implements AIProvider {
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   }) async* {
     final script = scripts[calls.clamp(0, scripts.length - 1)];
     calls++;

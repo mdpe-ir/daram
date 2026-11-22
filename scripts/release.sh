@@ -345,11 +345,27 @@ prepare_android() {
         local tmp
         touch "$local_props"
         tmp="$(mktemp)"
-        awk -v sdk="$ROOT/.tool/flutter-sdk" '
-            BEGIN { found = 0 }
-            /^flutter.sdk=/ { print "flutter.sdk=" sdk; found = 1; next }
+        # The direct-Gradle path bypasses `flutter build`, which is what normally
+        # refreshes local.properties. Keep the SDK path and the app version in
+        # sync with pubspec.yaml so the APK cannot ship with a stale version.
+        awk -v sdk="$ROOT/.tool/flutter-sdk" \
+            -v vname="$VERSION_NAME" -v vcode="$VERSION_CODE" '
+            BEGIN { found_sdk = 0; found_name = 0; found_code = 0 }
+            /^flutter.sdk=/ {
+                print "flutter.sdk=" sdk; found_sdk = 1; next
+            }
+            /^flutter.versionName=/ {
+                print "flutter.versionName=" vname; found_name = 1; next
+            }
+            /^flutter.versionCode=/ {
+                print "flutter.versionCode=" vcode; found_code = 1; next
+            }
             { print }
-            END { if (!found) print "flutter.sdk=" sdk }
+            END {
+                if (!found_sdk) print "flutter.sdk=" sdk
+                if (!found_name) print "flutter.versionName=" vname
+                if (!found_code) print "flutter.versionCode=" vcode
+            }
         ' "$local_props" > "$tmp"
         mv "$tmp" "$local_props"
     fi
@@ -581,8 +597,10 @@ build_android() {
     [[ "$mode" =~ ^(apk|split|aab)$ ]] || die "Unknown Android mode: $mode"
 
     ensure_signing
-    prepare_android
     pub_get
+    # Run after pub_get: the Flutter tool rewrites local.properties and would
+    # otherwise point Gradle back at the read-only SDK and the old version.
+    prepare_android
 
     local direct=false
     if [[ -d "$ROOT/.tool/flutter-sdk" && -x "$ANDROID_DIR/gradlew" ]]; then

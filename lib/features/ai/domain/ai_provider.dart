@@ -12,6 +12,7 @@ abstract interface class AIProvider {
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   });
 
   /// Performs a minimal real request to verify credentials, URL and model.

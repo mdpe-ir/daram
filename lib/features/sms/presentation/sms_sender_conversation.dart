@@ -6,6 +6,8 @@ import '../../../app/app_providers.dart';
 import '../../../app/design_system/daram_widgets.dart';
 import '../../../core/formatting/bidi_text.dart';
 import '../../../core/formatting/persian_formatting.dart';
+import '../../../core/time/calendar_date.dart';
+import '../../../app/theme/daram_colors.dart';
 import '../../accounts/domain/account.dart';
 import '../data/sms_scan_service.dart';
 import 'sms_controller.dart';
@@ -21,6 +23,7 @@ class SmsSenderConversation extends ConsumerStatefulWidget {
 
 class _SmsSenderConversationState extends ConsumerState<SmsSenderConversation> {
   final _handled = <String>{};
+  final _dismissing = <String>{};
   final _linked = <String>[];
   final _reply = TextEditingController();
   String? _feedback;
@@ -141,6 +144,20 @@ class _SmsSenderConversationState extends ConsumerState<SmsSenderConversation> {
     });
   }
 
+  Future<void> _dismiss(String sender) async {
+    setState(() => _dismissing.add(sender));
+    try {
+      await ref.read(smsControllerProvider.notifier).dismissSender(sender);
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('حذف پیشنهاد انجام نشد.')));
+    } finally {
+      if (mounted) setState(() => _dismissing.remove(sender));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(smsControllerProvider);
@@ -167,12 +184,36 @@ class _SmsSenderConversationState extends ConsumerState<SmsSenderConversation> {
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return DaramCard(
-                      child: Text(
-                        candidates.isNotEmpty
-                            ? 'از این سرشماره‌ها پیامک بانکی پیدا کردم. بگو هرکدام برای کدام حساب است.'
-                            : state.scanning
-                            ? 'دارم دنبال سرشماره‌های بانکی می‌گردم…'
-                            : 'فعلاً سرشمارهٔ بانکی تازه‌ای پیدا نکردم.',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            candidates.isNotEmpty
+                                ? 'این سرشماره‌ها احتمالاً بانکی‌اند. برای هرکدام حسابش را انتخاب کن.'
+                                : state.scanning
+                                ? 'دارم دنبال سرشماره‌های بانکی می‌گردم…'
+                                : state.error ?? 'فعلاً سرشمارهٔ بانکی تازه‌ای پیدا نکردم.',
+                          ),
+                          if (state.error != null && candidates.isNotEmpty)
+                            Text(state.error!),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: state.scanning || !state.enabled
+                                ? null
+                                : () {
+                                    setState(() => _feedback = null);
+                                    ref
+                                        .read(smsControllerProvider.notifier)
+                                        .refresh();
+                                  },
+                            icon: const Icon(LucideIcons.refreshCw, size: 16),
+                            label: const Text('بررسی دوباره'),
+                          ),
+                          if (state.scanning)
+                            const LinearProgressIndicator(
+                              semanticsLabel: 'در حال بررسی پیامک‌ها',
+                            ),
+                        ],
                       ),
                     );
                   }
@@ -183,14 +224,79 @@ class _SmsSenderConversationState extends ConsumerState<SmsSenderConversation> {
                     );
                   }
                   final candidate = candidates[index - _linked.length - 1];
-                  return ListTile(
-                    leading: const Icon(LucideIcons.messageSquare),
-                    title: Text(isolateLtr(candidate.sender)),
-                    subtitle: Text(
-                      '${format.persianDigits ? PersianDigits.toPersian('${candidate.count}') : candidate.count} پیامک احتمالی بانک',
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: DaramCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  isolateLtr(candidate.sender),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'حذف پیشنهاد',
+                                onPressed:
+                                    _dismissing.contains(candidate.sender)
+                                    ? null
+                                    : () => _dismiss(candidate.sender),
+                                icon: const Icon(LucideIcons.trash2, size: 18),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '${format.persianDigits ? PersianDigits.toPersian('${candidate.count}') : candidate.count} پیامک احتمالی بانک',
+                          ),
+                          for (final sample in candidate.examples)
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: context.daram.surfaceMuted,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    sample.body.trim(),
+                                    maxLines: 6,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    format.dates.date(
+                                      CalendarDate.fromDateTime(
+                                        sample.date.toLocal(),
+                                      ),
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: TextButton.icon(
+                              onPressed: _dismissing.contains(candidate.sender)
+                                  ? null
+                                  : () => _choose(candidate, accounts),
+                              icon: const Icon(LucideIcons.link, size: 16),
+                              label: const Text('انتخاب حساب'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    trailing: const Icon(LucideIcons.chevronLeft),
-                    onTap: () => _choose(candidate, accounts),
                   );
                 },
               ),

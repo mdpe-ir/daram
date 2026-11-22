@@ -1,5 +1,7 @@
 import 'package:daram/app/app.dart';
 import 'package:daram/app/app_providers.dart';
+import 'package:daram/app/design_system/crypto_picker.dart';
+import 'package:daram/app/design_system/currency_picker.dart';
 import 'package:daram/core/domain/enums.dart';
 import 'package:daram/core/money/rial.dart';
 import 'package:daram/core/time/calendar_date.dart';
@@ -111,6 +113,139 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('وام خرید'), findsWidgets);
     expect(find.text('بدهی باقی‌مانده'), findsWidgets);
+
+    await tester.tap(find.text('بدهی و طلب'));
+    await tester.pumpAndSettle();
+    await tester.binding.setSurfaceSize(const Size(340, 740));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpAndSettle();
+    expect(find.text('بدهی یا طلبی ثبت نشده است'), findsOneWidget);
+    expect(find.text('افزودن بدهی یا طلب'), findsOneWidget);
+    Future<void> enter(String label, String value) async {
+      final field = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == label,
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    String? fieldText(String label) => tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.decoration?.labelText == label,
+          ),
+        )
+        .controller
+        ?.text;
+
+    await tester.tap(find.text('بدهی یا طلب'));
+    await tester.pumpAndSettle();
+    expect(find.text('ثبت بدهی یا طلب'), findsOneWidget);
+    await tester.tap(find.text('طلب'));
+    await enter('طرف حساب', 'رضا');
+    await enter('مبلغ', '25000');
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('رضا'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('پرداخت‌ها'));
+    await tester.tap(find.text('پرداخت‌ها'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ثبت دریافت'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('واردکردن کل مانده'));
+    await tester.tap(find.widgetWithText(TextButton, 'ثبت دریافت').last);
+    await tester.pumpAndSettle();
+    expect(find.text('تسویه شده'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تسویه‌شده'));
+    await tester.pumpAndSettle();
+    expect(find.text('رضا'), findsOneWidget);
+
+    await tester.tap(find.text('دارایی‌ها'));
+    await tester.pumpAndSettle();
+    expect(find.text('دارایی‌ای ثبت نشده است'), findsOneWidget);
+    expect(find.text('افزودن دارایی'), findsOneWidget);
+    await tester.tap(find.text('دارایی'));
+    await tester.pumpAndSettle();
+    expect(find.text('ثبت دارایی'), findsOneWidget);
+    expect(find.text('دریافت نرخ طلای ۱۸ عیار'), findsOneWidget);
+    await enter('نام دارایی', 'طلای من');
+    await enter('وزن به گرم', '۲٫۲۵');
+    await enter('نرخ هر گرم (اختیاری)', '1000000');
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('طلای من'), findsOneWidget);
+    expect(find.text('۲,۲۵۰,۰۰۰ تومان'), findsWidgets);
+
+    // Currency assets pick from the catalog instead of typing an ISO code.
+    await tester.tap(find.text('دارایی'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ارز'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('انتخاب ارز'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('دلار آمریکا'));
+    await tester.pumpAndSettle();
+    expect(fieldText('نام دارایی'), 'دلار آمریکا');
+    await enter('تعداد واحد ارز', '10');
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('دلار آمریکا'), findsOneWidget);
+
+    // Editing a row keeps the generated name in sync with the new currency.
+    await tester.tap(find.byTooltip('گزینه‌های دلار آمریکا'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ویرایش و نرخ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CurrencyPickerField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('یورو'));
+    await tester.pumpAndSettle();
+    expect(fieldText('نام دارایی'), 'یورو');
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('یورو'), findsOneWidget);
+
+    // Crypto holdings pick a coin and prefill the name from it.
+    await tester.tap(find.text('دارایی'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('رمز ارز'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('انتخاب رمزارز'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('بیت‌کوین'));
+    await tester.pumpAndSettle();
+    expect(fieldText('نام دارایی'), 'بیت‌کوین');
+    expect(find.text('دریافت نرخ بیت‌کوین از نوسان'), findsOneWidget);
+    await enter('مقدار رمزارز', '0.5');
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('بیت‌کوین'), findsOneWidget);
+
+    // Editing a crypto row swaps the suggested name with the new coin.
+    await tester.tap(find.byTooltip('گزینه‌های بیت‌کوین'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ویرایش و نرخ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CryptoPickerField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('اتریوم'));
+    await tester.pumpAndSettle();
+    expect(fieldText('نام دارایی'), 'اتریوم');
+    expect(
+      find.text('نرخ زندهٔ این رمزارز در دسترس نیست؛ نرخ را دستی وارد کن.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('ذخیره'));
+    await tester.pumpAndSettle();
+    expect(find.text('اتریوم'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.binding.setSurfaceSize(null);
+    await tester.pumpAndSettle();
 
     // Settings
     await tester.tap(find.text('تنظیمات').last);

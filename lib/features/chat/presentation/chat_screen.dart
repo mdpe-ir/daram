@@ -13,14 +13,19 @@ import '../../../app/theme/daram_colors.dart';
 import '../../../core/domain/enums.dart';
 import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/localization/fa_strings.dart';
+import '../../../data/database/app_database.dart';
 import '../../settings/domain/app_settings.dart';
 import '../../sms/data/sms_inbox.dart';
+import '../../sms/data/sms_review_repository.dart';
 import '../../sms/presentation/sms_controller.dart';
 import '../domain/chat_models.dart';
+import '../domain/sms_chat_focus.dart';
 import 'chat_controller.dart';
 import 'chat_drawer.dart';
 import 'pending_action_card.dart';
 import 'report_card.dart';
+import 'sms_chat_focus_controller.dart';
+import 'sms_suggestion_cards.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -69,9 +74,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    final smsFocus = ref.read(smsChatFocusProvider);
     _inputController.clear();
+    ref.read(smsChatFocusProvider.notifier).clear();
     setState(() {});
-    if (SmsInbox.supported &&
+    if (!smsFocus.hasContent &&
+        SmsInbox.supported &&
         RegExp(
           r'^(?=.*سرشماره)(?=.*(?:تنظیم|انتخاب|پیدا|نشون|نشان|اضافه|وصل|کدوم|کدام)).+$',
         ).hasMatch(text)) {
@@ -82,7 +90,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     _focusNode.requestFocus();
     _scheduleScroll(force: true);
-    await ref.read(chatControllerProvider.notifier).send(text);
+    await ref
+        .read(chatControllerProvider.notifier)
+        .send(text, smsFocus: smsFocus);
   }
 
   void _useSuggestion(String text) {
@@ -117,6 +127,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
       if (previous.messages.isEmpty && next.messages.isNotEmpty) {
         _scheduleScroll(force: true);
+      }
+    });
+
+    ref.listen(chatControllerProvider.select((s) => s.activeSession?.id), (
+      previous,
+      next,
+    ) {
+      if (previous != next) {
+        ref.read(smsChatFocusProvider.notifier).clear();
       }
     });
 
@@ -642,12 +661,44 @@ class _UserBubble extends StatelessWidget {
           ),
           border: Border.all(color: colors.accent.withValues(alpha: 0.18)),
         ),
-        child: SelectableText(
-          message.content,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: colors.isDark ? Colors.white : colors.textPrimary,
-            height: 1.7,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.metadata['smsFocusLabel'] case final label?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      message.metadata['smsReplyTo'] != null
+                          ? LucideIcons.reply
+                          : LucideIcons.listChecks,
+                      size: 12,
+                      color: colors.accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '$label',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: colors.accent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            SelectableText(
+              message.content,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colors.isDark ? Colors.white : colors.textPrimary,
+                height: 1.7,
+              ),
+            ),
+          ],
         ),
       ),
     ).animate().fadeIn(duration: 250.ms).slideX(begin: 0.04, end: 0);
@@ -679,6 +730,7 @@ class _AssistantBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.daram;
     final reports = _reportsOf(message);
+    final smsIds = _smsIdsOf(message);
     final pending = actions.where((action) => action.isPending).toList();
 
     return Padding(
@@ -738,6 +790,7 @@ class _AssistantBubble extends StatelessWidget {
                     ),
                   ),
                 for (final action in actions) PendingActionCard(action: action),
+                if (smsIds.isNotEmpty) SmsSuggestionCards(ids: smsIds),
                 for (final report in reports) ChatReportCard(report: report),
                 Padding(
                   padding: const EdgeInsets.only(top: 4, right: 4),
@@ -787,6 +840,12 @@ class _AssistantBubble extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: 280.ms);
+  }
+
+  List<String> _smsIdsOf(ChatMessage message) {
+    final raw = message.metadata['smsSuggestionIds'];
+    if (raw is! List) return const <String>[];
+    return raw.map((item) => '$item').where((id) => id.isNotEmpty).toList();
   }
 
   List<ReportCardData> _reportsOf(ChatMessage message) {
@@ -1041,7 +1100,7 @@ class _TypingDotsState extends State<_TypingDots>
   }
 }
 
-class _Composer extends StatelessWidget {
+class _Composer extends ConsumerWidget {
   const _Composer({
     required this.controller,
     required this.focusNode,
@@ -1057,8 +1116,23 @@ class _Composer extends StatelessWidget {
   final VoidCallback onStop;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.daram;
+    final focus = ref.watch(smsChatFocusProvider);
+    ref.listen<SmsChatFocus>(smsChatFocusProvider, (previous, next) {
+      // Replying is a one-item action, so open the keyboard immediately.
+      // Group selection stays keyboard-free until the user taps the composer,
+      // otherwise the keyboard would cover the rows they are still selecting.
+      if (!(previous?.hasReply ?? false) && next.hasReply) {
+        focusNode.requestFocus();
+      }
+    });
+    final hint = focus.hasReply
+        ? 'پاسخ به این پیشنهاد را بنویس…'
+        : focus.hasSelection
+        ? 'دستور برای موارد انتخاب‌شده…'
+        : FaStrings.chatHint;
+
     return Container(
       decoration: BoxDecoration(
         color: colors.background,
@@ -1067,69 +1141,162 @@ class _Composer extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: SafeArea(
         top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: colors.surfaceMuted,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: colors.border),
-                ),
-                child: TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  minLines: 1,
-                  maxLines: 5,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  textAlignVertical: TextAlignVertical.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    hintText: FaStrings.chatHint,
-                    hintStyle: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: colors.textMuted),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            if (focus.hasContent) _SmsFocusBar(focus: focus),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: colors.border),
+                    ),
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      minLines: 1,
+                      maxLines: 5,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      textAlignVertical: TextAlignVertical.center,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        hintText: hint,
+                        hintStyle: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: colors.textMuted),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (context, value, child) {
-                final enabled = value.text.trim().isNotEmpty;
-                if (streaming) {
-                  return _CircleButton(
-                    icon: LucideIcons.square,
-                    onTap: onStop,
-                    background: colors.surfaceElevated,
-                    foreground: colors.expense,
-                    tooltip: FaStrings.stop,
-                  );
-                }
-                return _CircleButton(
-                  icon: LucideIcons.arrowUp,
-                  onTap: enabled ? onSend : null,
-                  gradient: enabled ? colors.brandGradient : null,
-                  background: colors.surfaceMuted,
-                  foreground: enabled ? colors.onAccent : colors.textMuted,
-                  tooltip: FaStrings.send,
-                );
-              },
+                const SizedBox(width: 8),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: controller,
+                  builder: (context, value, child) {
+                    final enabled = value.text.trim().isNotEmpty;
+                    if (streaming) {
+                      return _CircleButton(
+                        icon: LucideIcons.square,
+                        onTap: onStop,
+                        background: colors.surfaceElevated,
+                        foreground: colors.expense,
+                        tooltip: FaStrings.stop,
+                      );
+                    }
+                    return _CircleButton(
+                      icon: LucideIcons.arrowUp,
+                      onTap: enabled ? onSend : null,
+                      gradient: enabled ? colors.brandGradient : null,
+                      background: colors.surfaceMuted,
+                      foreground: enabled ? colors.onAccent : colors.textMuted,
+                      tooltip: FaStrings.send,
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _SmsFocusBar extends ConsumerWidget {
+  const _SmsFocusBar({required this.focus});
+
+  final SmsChatFocus focus;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.daram;
+    final text = Theme.of(context).textTheme;
+    final format = DaramFormat.of(context);
+    final replyRow = focus.replyToId == null
+        ? null
+        : ref.watch(smsSuggestionProvider(focus.replyToId!)).value;
+    final title = focus.hasReply
+        ? 'پاسخ به پیشنهاد پیامکی'
+        : '${PersianDigits.toPersian('${focus.selectedIds.length}')} پیشنهاد انتخاب‌شده';
+    final subtitle = focus.hasReply
+        ? _replySummary(replyRow, format)
+        : 'دستور را بنویس؛ دستیار روی همین موارد اجرا می‌کند.';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: colors.accentSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.accent.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            focus.hasReply ? LucideIcons.reply : LucideIcons.listChecks,
+            size: 15,
+            color: colors.accent,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: text.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.labelSmall?.copyWith(color: colors.textMuted),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => ref.read(smsChatFocusProvider.notifier).clear(),
+            tooltip: 'پاک کردن',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+            icon: Icon(LucideIcons.x, size: 15, color: colors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _replySummary(SmsSuggestionRow? row, DaramFormat format) {
+    if (row == null) return 'پیشنهاد پیامکی';
+    final draft = SmsReviewRepository.draftOf(row);
+    final title = draft.description?.trim();
+    final amount = draft.amountRial.isZero
+        ? null
+        : format.money.format(draft.amountRial);
+    return [
+      if (title != null && title.isNotEmpty) title,
+      ?amount,
+      if (row.status == 'pending') 'در انتظار تأیید',
+    ].join(' · ');
   }
 }
 

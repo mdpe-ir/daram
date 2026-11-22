@@ -128,6 +128,10 @@ class ConfirmationService {
       case DaramTool.manageCategory ||
           DaramTool.queryTransactions ||
           DaramTool.generateReport ||
+          DaramTool.reviewSmsSuggestions ||
+          DaramTool.confirmSmsSuggestion ||
+          DaramTool.editSmsSuggestion ||
+          DaramTool.dismissSmsSuggestion ||
           null:
         throw const ValidationException('این پیش‌نویس قابل تأیید نیست.');
     }

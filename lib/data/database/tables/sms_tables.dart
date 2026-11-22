@@ -24,6 +24,10 @@ class SmsSuggestions extends Table {
   TextColumn get payload => text()();
   TextColumn get status => text().withDefault(const Constant('pending'))();
 
+  /// Set when the user or the assistant edits the draft. A later inbox rescan
+  /// must not overwrite an edited draft with the auto-derived one.
+  DateTimeColumn get editedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -35,4 +39,12 @@ class SmsPatterns extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+@DataClassName('SmsSenderDismissal')
+class SmsSenderDismissals extends Table {
+  TextColumn get sender => text()();
+
+  @override
+  Set<Column> get primaryKey => {sender};
 }

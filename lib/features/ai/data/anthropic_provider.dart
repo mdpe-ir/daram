@@ -4,15 +4,20 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../domain/ai_log.dart';
 import '../domain/ai_models.dart';
 import '../domain/ai_provider.dart';
+import 'ai_diagnostics.dart';
+import 'ai_log_store.dart';
 import 'sse.dart';
 
 /// Native Anthropic Messages API integration with SSE streaming and tools.
 class AnthropicProvider implements AIProvider {
-  AnthropicProvider(this._dio);
+  AnthropicProvider(this._dio, {AILogStore? logs})
+    : _logs = logs ?? AILogStore.silent();
 
   final Dio _dio;
+  final AILogStore _logs;
   static const _apiVersion = '2023-06-01';
 
   @override
@@ -20,6 +25,7 @@ class AnthropicProvider implements AIProvider {
     required AIConfig config,
     required List<AIMessage> messages,
     required List<ToolDefinition> tools,
+    String? sessionId,
   }) {
     final controller = StreamController<AIStreamEvent>();
     final cancelToken = CancelToken();
@@ -28,6 +34,9 @@ class AnthropicProvider implements AIProvider {
     };
 
     Future<void>(() async {
+      final watch = Stopwatch()..start();
+      final endpoint = config.chatEndpoint();
+      final providerLabel = config.provider.label;
       try {
         final body = <String, Object?>{
           'model': config.model,
@@ -54,7 +63,7 @@ class AnthropicProvider implements AIProvider {
         }
 
         final response = await _dio.post<ResponseBody>(
-          config.chatEndpoint(),
+          endpoint,
           data: body,
           cancelToken: cancelToken,
           options: Options(
@@ -72,8 +81,27 @@ class AnthropicProvider implements AIProvider {
           ),
         );
 
+        _logs.info(
+          'پاسخ سرویس‌دهنده (${response.statusCode})',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          statusCode: response.statusCode,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint\nstream: true',
+        );
+
         if (response.statusCode != 200) {
           final detail = await _readErrorBody(response.data);
+          _logs.error(
+            'سرویس‌دهنده درخواست را نپذیرفت (${response.statusCode})',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            statusCode: response.statusCode,
+            durationMs: watch.elapsedMilliseconds,
+            detail: 'endpoint: $endpoint\n$detail',
+          );
           controller.add(
             AIStreamError(
               persianAIError(detail, statusCode: response.statusCode),
@@ -130,32 +158,84 @@ class AnthropicProvider implements AIProvider {
             case 'message_stop':
               if (calls.isNotEmpty) controller.add(AIStreamToolCalls(calls));
               controller.add(const AIStreamDone(finishReason: 'stop'));
+              _logs.info(
+                'جریان پاسخ کامل شد',
+                area: AILogArea.network,
+                provider: providerLabel,
+                model: config.model,
+                statusCode: response.statusCode,
+                durationMs: watch.elapsedMilliseconds,
+                detail:
+                    'endpoint: $endpoint\nfinishReason: stop\n'
+                    'toolCalls: ${calls.length}',
+              );
               sawError = true; // stop processing further events
             case 'error':
               final error = decoded['error'];
-              controller.add(
-                AIStreamError(
-                  error is Map && error['message'] is String
-                      ? error['message'] as String
-                      : 'خطای سرویس Anthropic',
-                ),
+              final message = error is Map && error['message'] is String
+                  ? error['message'] as String
+                  : 'خطای سرویس Anthropic';
+              _logs.error(
+                'خطای سرویس‌دهنده در جریان پاسخ',
+                area: AILogArea.network,
+                provider: providerLabel,
+                model: config.model,
+                statusCode: response.statusCode,
+                durationMs: watch.elapsedMilliseconds,
+                detail: 'endpoint: $endpoint\nmessage: $message',
               );
+              controller.add(AIStreamError(message));
               sawError = true;
           }
           if (sawError) break;
         }
-        if (!sawError && calls.isNotEmpty) {
-          controller.add(AIStreamToolCalls(calls));
+        if (!sawError) {
+          _logs.warning(
+            'جریان پاسخ بدون پیام پایانی بسته شد',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            statusCode: response.statusCode,
+            durationMs: watch.elapsedMilliseconds,
+            detail: 'endpoint: $endpoint',
+          );
+          if (calls.isNotEmpty) controller.add(AIStreamToolCalls(calls));
           controller.add(const AIStreamDone());
         }
       } on DioException catch (error) {
-        if (CancelToken.isCancel(error)) return;
+        if (CancelToken.isCancel(error)) {
+          _logs.info(
+            'درخواست دستیار لغو شد',
+            area: AILogArea.network,
+            provider: providerLabel,
+            model: config.model,
+            durationMs: watch.elapsedMilliseconds,
+            detail: 'endpoint: $endpoint',
+          );
+          return;
+        }
+        final status = error.response?.statusCode;
+        _logs.error(
+          'خطای شبکه: ${dioErrorTypeLabel(error.type)}',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          statusCode: status,
+          durationMs: watch.elapsedMilliseconds,
+          detail: describeDioException(error),
+        );
         controller.add(
-          AIStreamError(
-            persianAIError(error, statusCode: error.response?.statusCode),
-          ),
+          AIStreamError(persianAIError(error, statusCode: status)),
         );
       } on Object catch (error) {
+        _logs.error(
+          'خطا در پردازش پاسخ سرویس‌دهنده',
+          area: AILogArea.network,
+          provider: providerLabel,
+          model: config.model,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint\n${error.toString()}',
+        );
         controller.add(AIStreamError(persianAIError(error)));
       } finally {
         if (!controller.isClosed) await controller.close();
@@ -167,9 +247,11 @@ class AnthropicProvider implements AIProvider {
 
   @override
   Future<AIConnectionResult> testConnection(AIConfig config) async {
+    final watch = Stopwatch()..start();
+    final endpoint = config.chatEndpoint();
     try {
       final response = await _dio.post<dynamic>(
-        config.chatEndpoint(),
+        endpoint,
         data: {
           'model': config.model,
           'max_tokens': 5,
@@ -190,19 +272,46 @@ class AnthropicProvider implements AIProvider {
         ),
       );
       if (response.statusCode == 200) {
+        _logs.info(
+          'تست اتصال موفق بود',
+          area: AILogArea.network,
+          provider: config.provider.label,
+          model: config.model,
+          statusCode: response.statusCode,
+          durationMs: watch.elapsedMilliseconds,
+          detail: 'endpoint: $endpoint',
+        );
         return const AIConnectionResult.success(
           'اتصال برقرار است و مدل پاسخ داد.',
         );
       }
-      return AIConnectionResult.failure(
-        persianAIError(
-          response.data ?? 'error',
-          statusCode: response.statusCode,
-        ),
+      final message = persianAIError(
+        response.data ?? 'error',
+        statusCode: response.statusCode,
       );
+      _logs.warning(
+        'تست اتصال ناموفق بود (${response.statusCode})',
+        area: AILogArea.network,
+        provider: config.provider.label,
+        model: config.model,
+        statusCode: response.statusCode,
+        durationMs: watch.elapsedMilliseconds,
+        detail: 'endpoint: $endpoint\n$message',
+      );
+      return AIConnectionResult.failure(message);
     } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      _logs.error(
+        'تست اتصال ناموفق بود: ${dioErrorTypeLabel(error.type)}',
+        area: AILogArea.network,
+        provider: config.provider.label,
+        model: config.model,
+        statusCode: status,
+        durationMs: watch.elapsedMilliseconds,
+        detail: describeDioException(error),
+      );
       return AIConnectionResult.failure(
-        persianAIError(error, statusCode: error.response?.statusCode),
+        persianAIError(error, statusCode: status),
       );
     }
   }

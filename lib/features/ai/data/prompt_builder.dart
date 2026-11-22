@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/category_icons.dart';
+import '../../../core/constants/category_styles.dart';
 import '../../../core/constants/iranian_banks.dart';
 import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/currency.dart';
@@ -145,6 +146,9 @@ class PromptBuilder {
       '{{tool_mode_instructions}}': toolModeInstructions,
       '{{tools}}': toolsText,
       '{{category_icons}}': categoryIconSlugs.join('، '),
+      '{{category_colors}}': categoryColorPalette
+          .map((option) => '${option.nameFa} (${option.hex})')
+          .join('، '),
       '{{examples}}': examplesText,
     };
 

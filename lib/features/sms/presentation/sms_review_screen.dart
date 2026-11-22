@@ -47,6 +47,7 @@ class _SmsReviewScreenState extends ConsumerState<SmsReviewScreen> {
       context,
       draft: SmsReviewRepository.draftOf(row),
       defaultCurrency: settings?.currencyUnit ?? CurrencyUnit.toman,
+      saveLabel: 'تأیید و ثبت',
     );
     if (payload == null || !mounted) return;
     await _run(
@@ -163,14 +164,11 @@ class _SmsReviewScreenState extends ConsumerState<SmsReviewScreen> {
     final categoryIds = {for (final item in categories) item.id};
     final ready = {
       for (final row in rows)
-        if (row.status == 'pending' &&
-            activeAccountIds.contains(
-              SmsReviewRepository.draftOf(row).accountId,
-            ) &&
-            (SmsReviewRepository.draftOf(row).categoryId == null ||
-                categoryIds.contains(
-                  SmsReviewRepository.draftOf(row).categoryId,
-                )))
+        if (SmsReviewRepository.isReady(
+          row,
+          accountIds: activeAccountIds,
+          categoryIds: categoryIds,
+        ))
           row.id,
     };
     return Scaffold(
@@ -265,11 +263,11 @@ class _SmsReviewScreenState extends ConsumerState<SmsReviewScreen> {
                     title: Text(error),
                     onTap: () => ref.read(smsInboxProvider).openSettings(),
                   ),
-                if (state.candidates.isNotEmpty)
+                if (state.enabled)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(LucideIcons.messageSquare),
-                    title: const Text('سرشماره‌های بانکی اضافه‌نشده'),
+                    title: const Text('گفتگو دربارهٔ سرشماره‌ها'),
                     trailing: const Icon(LucideIcons.chevronLeft),
                     onTap: () => context.push('/sms/senders'),
                   ),
