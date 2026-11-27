@@ -4,8 +4,8 @@
 abstract final class AppInfo {
   static const String name = 'DARAM';
   static const String persianName = 'دارام';
-  static const String version = '1.6.0';
-  static const String buildNumber = '13';
+  static const String version = '1.6.1';
+  static const String buildNumber = '14';
   static const String tagline = 'پولت رو بشناس، هوشمندانه زندگی کن.';
   static const String taglineEn = 'Know Your Money. Own Your Future.';
   static const String phase = 'فاز یک — دستیار مالی محلی';
