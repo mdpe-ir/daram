@@ -153,6 +153,123 @@ class TransferRepository {
     });
   }
 
+  /// Edits a transfer and rewrites both ledger movements atomically.
+  ///
+  /// Any fee row is recreated so the source account movement and the recorded
+  /// expense stay consistent. Only fields that are provided change.
+  Future<void> update({
+    required String id,
+    String? sourceAccountId,
+    String? destinationAccountId,
+    Rial? amount,
+    Rial? fee,
+    CalendarDate? date,
+    String? description,
+    bool clearDescription = false,
+  }) async {
+    final row = await (_db.select(
+      _db.transfers,
+    )..where((table) => table.id.equals(id))).getSingleOrNull();
+    if (row == null) throw const NotFoundException('انتقال پیدا نشد.');
+
+    final newSourceId = sourceAccountId ?? row.sourceAccountId;
+    final newDestinationId = destinationAccountId ?? row.destinationAccountId;
+    final newAmount = amount ?? Rial(row.amountRial);
+    final newFee = fee ?? Rial(row.feeRial);
+    final newDate = date ?? CalendarDate.fromStored(row.transferDate);
+    final newDescription = clearDescription
+        ? null
+        : (description?.trim() ?? row.description);
+
+    if (newAmount <= Rial.zero) {
+      throw const ValidationException('مبلغ انتقال باید بزرگ‌تر از صفر باشد.');
+    }
+    if (newFee < Rial.zero) {
+      throw const ValidationException('کارمزد نمی‌تواند منفی باشد.');
+    }
+    if (newSourceId == newDestinationId) {
+      throw const ValidationException('حساب مبدأ و مقصد باید متفاوت باشند.');
+    }
+    // Validate both accounts exist and are not archived before writing.
+    await _account(newSourceId);
+    await _account(newDestinationId);
+    final now = DateTime.now().toUtc();
+
+    await _db.transaction(() async {
+      await (_db.delete(_db.ledgerEntries)..where(
+            (table) =>
+                table.sourceId.equals(id) &
+                (table.sourceType.equalsValue(LedgerSource.transferOut) |
+                    table.sourceType.equalsValue(LedgerSource.transferIn)),
+          ))
+          .go();
+      await (_db.delete(
+        _db.transactions,
+      )..where((table) => table.id.equals('${id}_fee'))).go();
+
+      await (_db.update(
+        _db.transfers,
+      )..where((table) => table.id.equals(id))).write(
+        TransfersCompanion(
+          sourceAccountId: Value(newSourceId),
+          destinationAccountId: Value(newDestinationId),
+          amountRial: Value(newAmount.value),
+          feeRial: Value(newFee.value),
+          transferDate: Value(newDate.stored),
+          description: Value(newDescription),
+        ),
+      );
+
+      await _db.batch((batch) {
+        batch.insert(
+          _db.ledgerEntries,
+          LedgerEntriesCompanion.insert(
+            accountId: newSourceId,
+            deltaRial: -(newAmount.value + newFee.value),
+            entryDate: newDate.stored,
+            sourceType: LedgerSource.transferOut,
+            sourceId: id,
+            operationId: row.operationId,
+            createdAt: now,
+          ),
+        );
+        batch.insert(
+          _db.ledgerEntries,
+          LedgerEntriesCompanion.insert(
+            accountId: newDestinationId,
+            deltaRial: newAmount.value,
+            entryDate: newDate.stored,
+            sourceType: LedgerSource.transferIn,
+            sourceId: id,
+            operationId: row.operationId,
+            createdAt: now,
+          ),
+        );
+      });
+
+      if (newFee > Rial.zero) {
+        await _db
+            .into(_db.transactions)
+            .insert(
+              TransactionsCompanion.insert(
+                id: '${id}_fee',
+                type: TransactionType.expense,
+                amountRial: newFee.value,
+                categoryId: const Value('cat_other_expense'),
+                accountId: newSourceId,
+                transactionDate: newDate.stored,
+                description: Value(
+                  'کارمزد انتقال${newDescription == null ? '' : ' — $newDescription'}',
+                ),
+                operationId: '${row.operationId}:fee',
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+      }
+    });
+  }
+
   Future<TransferRecord?> findById(String id) async {
     final source = _db.alias(_db.accounts, 'source_account');
     final destination = _db.alias(_db.accounts, 'destination_account');

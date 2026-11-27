@@ -144,6 +144,16 @@ JS loader; using a newer `sqlite3.wasm` with an older worker can fail at
 - **Downloads:** CSV/PDF/backup export triggers a normal browser download;
   import uses the browser file picker.
 
+### Market prices on the web
+
+- Bonbast requires a `Cookie` header and `X-Requested-With` and Chand publishes
+  no CORS headers, so those two sources cannot be called from a browser. The
+  web build still fetches the CORS-enabled sources when available, reports the
+  blocked ones in the market snapshot, and the asset editor always accepts a
+  manual rate. Use the Android/Linux build for the full live-rate experience.
+- The market layer caches one snapshot for five minutes and is shared by the
+  asset editor and the assistant, so a single refresh covers both.
+
 ### Verification
 
 The release/profile build was served locally and driven in headless Chrome via

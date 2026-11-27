@@ -1,5 +1,4 @@
 import 'package:daram/core/constants/crypto_assets.dart';
-import 'package:daram/features/assets/data/navasan_rates.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,13 +27,40 @@ void main() {
     }
   });
 
-  test('only quoted coins offer the fetch button', () {
-    final quoted = cryptoAssets.where((coin) => coin.hasQuote).toList();
-    expect(quoted.map((coin) => coin.symbol), ['BTC']);
+  test('only coins covered by the market sources offer the fetch button', () {
+    final quoted = cryptoAssets
+        .where((coin) => coin.hasQuote)
+        .map((coin) => coin.symbol)
+        .toList();
+    expect(quoted, [
+      'BTC',
+      'ETH',
+      'USDT',
+      'BNB',
+      'SOL',
+      'XRP',
+      'DOGE',
+      'TRX',
+      'TON',
+      'LTC',
+      'BCH',
+    ]);
     for (final coin in cryptoAssets) {
       expect(
         coin.hasQuote,
-        NavasanRates.quotedCryptoContains(coin.symbol.toLowerCase()),
+        const {
+          'BTC',
+          'ETH',
+          'USDT',
+          'BNB',
+          'SOL',
+          'XRP',
+          'DOGE',
+          'TRX',
+          'TON',
+          'LTC',
+          'BCH',
+        }.contains(coin.symbol),
         reason: coin.symbol,
       );
     }

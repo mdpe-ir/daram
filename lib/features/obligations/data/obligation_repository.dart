@@ -51,6 +51,28 @@ class ObligationRepository {
           .watch()
           .map((rows) => rows.map(_map).toList());
 
+  /// Snapshot of every obligation, used by the assistant tools.
+  Future<List<Obligation>> list() async {
+    final rows =
+        await (_withPaid()
+              ..addColumns([_paid])
+              ..orderBy([
+                OrderingTerm.desc(_db.obligations.createdAt),
+                OrderingTerm.asc(_db.obligations.id),
+              ]))
+            .get();
+    return rows.map(_map).toList();
+  }
+
+  Future<Obligation?> findById(String id) async {
+    final result =
+        await (_withPaid()
+              ..addColumns([_paid])
+              ..where(_db.obligations.id.equals(id)))
+            .getSingleOrNull();
+    return result == null ? null : _map(result);
+  }
+
   Future<Obligation> _get(String id) async {
     final result =
         await (_withPaid()

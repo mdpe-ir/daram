@@ -1,0 +1,22 @@
+{
+  "name": "update_settings",
+  "description": "تغییر تنظیمات نمایشی برنامه به خواست کاربر: حالت روشن/تاریک، واحد نمایش تومان/ریال و ارقام فارسی. این تغییر غیرمالی است و بلافاصله اعمال می‌شود و نیازی به پیش‌نویس ندارد. فقط فیلدهایی را بفرست که کاربر گفته است. کلید API و مدل هوش مصنوعی را هرگز از این ابزار تغییر نده.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "theme_mode": {
+        "type": "string",
+        "enum": ["system", "light", "dark"],
+        "description": "حالت ظاهری برنامه."
+      },
+      "currency_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد نمایش مبالغ."
+      },
+      "persian_digits": { "type": "boolean", "description": "نمایش ارقام فارسی." }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

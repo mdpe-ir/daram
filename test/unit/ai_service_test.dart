@@ -13,11 +13,15 @@ import 'package:daram/features/ai/domain/ai_models.dart';
 import 'package:daram/features/ai/domain/ai_provider.dart';
 import 'package:daram/features/categories/data/category_repository.dart';
 import 'package:daram/features/chat/data/chat_repository.dart';
+import 'package:daram/features/chat/domain/chat_models.dart';
 import 'package:daram/features/dashboard/data/analytics_repository.dart';
 import 'package:daram/features/loans/data/loan_repository.dart';
 import 'package:daram/features/sms/data/sms_review_repository.dart';
 import 'package:daram/features/transactions/data/operation_repository.dart';
 import 'package:daram/features/transactions/data/transaction_repository.dart';
+import 'package:daram/features/assets/data/asset_repository.dart';
+import 'package:daram/features/obligations/data/obligation_repository.dart';
+import 'package:daram/features/transactions/data/transfer_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
@@ -28,6 +32,7 @@ class _ScriptedProvider implements AIProvider {
 
   final List<List<AIStreamEvent>> scripts;
   int calls = 0;
+  List<AIMessage>? lastMessages;
 
   @override
   Stream<AIStreamEvent> streamChat({
@@ -36,6 +41,7 @@ class _ScriptedProvider implements AIProvider {
     required List<ToolDefinition> tools,
     String? sessionId,
   }) async* {
+    lastMessages = List<AIMessage>.of(messages);
     final script = scripts[calls.clamp(0, scripts.length - 1)];
     calls++;
     for (final event in script) {
@@ -90,6 +96,9 @@ void main() {
       analytics: AnalyticsRepository(db, accounts, transactions, loans),
       sms: SmsReviewRepository(db, transactions),
       chat: ChatRepository(db),
+      assets: AssetRepository(db),
+      obligations: ObligationRepository(db),
+      transfers: TransferRepository(db, operations),
     );
   });
 
@@ -157,6 +166,69 @@ void main() {
       expect(await db.select(db.transactions).get(), isEmpty);
     },
   );
+
+  test('quoted replies stay visible in the model history', () async {
+    final provider = _ScriptedProvider([
+      [const AIStreamText('باشه.'), const AIStreamDone()],
+    ]);
+    final service = AIChatService(
+      providers: _FakeRegistry(provider),
+      tools: tools,
+      executor: executor,
+    );
+    final history = [
+      ChatMessage(
+        id: 'm1',
+        sessionId: 'session-1',
+        role: ChatRole.user,
+        content: 'ناهار ۲۵۰ هزار تومان بود',
+        type: ChatMessageType.text,
+        metadata: const {'replyToPreview': 'پیش‌نویس ناهار'},
+        createdAt: DateTime.utc(2026, 11, 6, 10),
+      ),
+      ChatMessage(
+        id: 'm2',
+        sessionId: 'session-1',
+        role: ChatRole.user,
+        content: 'تأییدش کن',
+        type: ChatMessageType.text,
+        metadata: const {
+          'smsFocusLabel': 'پاسخ به پیشنهاد · پارکینگ',
+          'smsReplyTo': 'sms-1',
+        },
+        createdAt: DateTime.utc(2026, 11, 6, 11),
+      ),
+    ];
+
+    await service
+        .run(
+          config: config(AIToolMode.native),
+          systemPrompt: 'system',
+          history: history,
+          userMessage: 'خب؟',
+          sessionId: 'session-1',
+          defaultCurrency: CurrencyUnit.toman,
+        )
+        .toList();
+
+    final sent = provider.lastMessages!;
+    expect(
+      sent.any(
+        (message) =>
+            message.role == AIRole.user &&
+            message.content.contains('«پاسخ به پیام: پیش‌نویس ناهار»'),
+      ),
+      isTrue,
+    );
+    expect(
+      sent.any(
+        (message) => message.content.contains(
+          '«پاسخ به کارت پیامکی: پاسخ به پیشنهاد · پارکینگ»',
+        ),
+      ),
+      isTrue,
+    );
+  });
 
   test('JSON fallback parses the envelope and creates a draft', () async {
     final envelope = {

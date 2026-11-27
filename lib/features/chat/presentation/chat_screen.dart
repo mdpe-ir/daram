@@ -22,6 +22,7 @@ import '../domain/chat_models.dart';
 import '../domain/sms_chat_focus.dart';
 import 'chat_controller.dart';
 import 'chat_drawer.dart';
+import 'overview_card.dart';
 import 'pending_action_card.dart';
 import 'report_card.dart';
 import 'sms_chat_focus_controller.dart';
@@ -75,8 +76,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     final smsFocus = ref.read(smsChatFocusProvider);
+    final replyTo = ref.read(chatControllerProvider).replyTo;
     _inputController.clear();
     ref.read(smsChatFocusProvider.notifier).clear();
+    ref.read(chatControllerProvider.notifier).clearReplyTo();
     setState(() {});
     if (!smsFocus.hasContent &&
         SmsInbox.supported &&
@@ -92,7 +95,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scheduleScroll(force: true);
     await ref
         .read(chatControllerProvider.notifier)
-        .send(text, smsFocus: smsFocus);
+        .send(text, smsFocus: smsFocus, replyToMessageId: replyTo?.id);
   }
 
   void _useSuggestion(String text) {
@@ -136,6 +139,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ) {
       if (previous != next) {
         ref.read(smsChatFocusProvider.notifier).clear();
+        ref.read(chatControllerProvider.notifier).clearReplyTo();
       }
     });
 
@@ -280,6 +284,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           onConfirmAll: () => ref
                               .read(chatControllerProvider.notifier)
                               .confirmAll(message.id),
+                          onReply: () {
+                            HapticFeedback.selectionClick();
+                            ref
+                                .read(chatControllerProvider.notifier)
+                                .replyTo(message);
+                            _focusNode.requestFocus();
+                          },
                         );
                       },
                     ),
@@ -391,6 +402,7 @@ class _EmptyChat extends StatelessWidget {
     'دیروز ۳ میلیون تومان حقوق گرفتم',
     '۵ میلیون تومان از حساب ملت به بلو بانک انتقال دادم',
     'یه وام ۳۰ میلیونی گرفتم که باید تو ۳ قسط پرداخت کنم',
+    'دارایی‌هامو با هم جمع کن و بگو وضعیتم چطوره',
   ];
 
   @override
@@ -467,6 +479,20 @@ class _EmptyChat extends StatelessWidget {
                 label: FaStrings.quickLoans,
                 icon: LucideIcons.banknote,
                 onTap: () => onSuggestion('وضعیت وام‌ها چطوره؟'),
+              ),
+              _QuickAction(
+                label: FaStrings.quickOverview,
+                icon: LucideIcons.gauge,
+                onTap: () => onSuggestion(
+                  'وضعیت مالی من چطوره؟ دارایی‌ها، بدهی‌ها و ارزش خالصم رو حساب کن.',
+                ),
+              ),
+              _QuickAction(
+                label: FaStrings.quickRoadmap,
+                icon: LucideIcons.map,
+                onTap: () => onSuggestion(
+                  'یه نقشه راه مالی برای من بده و بگو قدم بعدی چیه.',
+                ),
               ),
             ],
           ),
@@ -590,6 +616,7 @@ class _MessageView extends StatelessWidget {
     required this.onRegenerate,
     required this.onUndo,
     required this.onConfirmAll,
+    required this.onReply,
   });
 
   final ChatMessage message;
@@ -599,38 +626,45 @@ class _MessageView extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final ValueChanged<String> onUndo;
   final VoidCallback onConfirmAll;
+  final VoidCallback onReply;
 
   @override
   Widget build(BuildContext context) {
+    final Widget child;
     if (message.isUser) {
-      return _UserBubble(message: message);
-    }
-    if (message.type == ChatMessageType.confirmation) {
-      return _ConfirmationMessage(message: message, onUndo: onUndo);
-    }
-    if (message.type == ChatMessageType.info) {
-      return _InfoMessage(message: message);
-    }
-    if (message.type == ChatMessageType.error) {
-      return _AssistantBubble(
+      child = _UserBubble(message: message);
+    } else if (message.type == ChatMessageType.confirmation) {
+      child = _ConfirmationMessage(message: message, onUndo: onUndo);
+    } else if (message.type == ChatMessageType.info) {
+      child = _InfoMessage(message: message);
+    } else if (message.type == ChatMessageType.error) {
+      child = _AssistantBubble(
         message: message,
         actions: const [],
         onCopy: onCopy,
+        onReply: onReply,
         onRegenerate: onRegenerate,
         isError: true,
         onUndo: onUndo,
         onConfirmAll: onConfirmAll,
         isLast: isLast,
       );
+    } else {
+      child = _AssistantBubble(
+        message: message,
+        actions: actions,
+        onCopy: onCopy,
+        onReply: onReply,
+        onRegenerate: onRegenerate,
+        onUndo: onUndo,
+        onConfirmAll: onConfirmAll,
+        isLast: isLast,
+      );
     }
-    return _AssistantBubble(
-      message: message,
-      actions: actions,
-      onCopy: onCopy,
-      onRegenerate: onRegenerate,
-      onUndo: onUndo,
-      onConfirmAll: onConfirmAll,
-      isLast: isLast,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: onReply,
+      child: child,
     );
   }
 }
@@ -644,7 +678,9 @@ class _UserBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.daram;
     return Align(
-      alignment: AlignmentDirectional.centerEnd,
+      // The app runs right-to-left, so a directional "end" would put the user's
+      // own messages on the left. They are pinned to the physical right.
+      alignment: Alignment.centerRight,
       child: Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.82,
@@ -665,6 +701,39 @@ class _UserBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (message.metadata['replyToPreview'] case final preview?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceMuted.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(
+                      right: BorderSide(color: colors.accent, width: 2.5),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.reply, size: 12, color: colors.accent),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '$preview',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colors.textMuted),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (message.metadata['smsFocusLabel'] case final label?)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -710,6 +779,7 @@ class _AssistantBubble extends StatelessWidget {
     required this.message,
     required this.actions,
     required this.onCopy,
+    required this.onReply,
     required this.onRegenerate,
     required this.onUndo,
     required this.onConfirmAll,
@@ -720,6 +790,7 @@ class _AssistantBubble extends StatelessWidget {
   final ChatMessage message;
   final List<PendingAction> actions;
   final VoidCallback onCopy;
+  final VoidCallback onReply;
   final VoidCallback? onRegenerate;
   final ValueChanged<String> onUndo;
   final VoidCallback onConfirmAll;
@@ -729,20 +800,26 @@ class _AssistantBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.daram;
-    final reports = _reportsOf(message);
+    final reports = _reportPayloadsOf(message);
     final smsIds = _smsIdsOf(message);
     final pending = actions.where((action) => action.isPending).toList();
 
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 2),
       child: Row(
+        // Layout direction only: the avatar leads on the physical left while
+        // the markdown inside still renders in the app's RTL direction.
+        textDirection: TextDirection.ltr,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const DaramMark(size: 26),
           const SizedBox(width: 8),
-          Expanded(
+          Flexible(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              // In this RTL app `end` is the physical left, so every part of
+              // the assistant turn hugs the avatar side of the thread.
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -791,11 +868,29 @@ class _AssistantBubble extends StatelessWidget {
                   ),
                 for (final action in actions) PendingActionCard(action: action),
                 if (smsIds.isNotEmpty) SmsSuggestionCards(ids: smsIds),
-                for (final report in reports) ChatReportCard(report: report),
+                for (final report in reports)
+                  if (report['kind'] == 'financial_overview')
+                    ChatOverviewCard(overview: report)
+                  else
+                    ChatReportCard(report: ReportCardData.fromJson(report)),
                 Padding(
                   padding: const EdgeInsets.only(top: 4, right: 4),
                   child: Row(
                     children: [
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(
+                          minWidth: 30,
+                          minHeight: 30,
+                        ),
+                        onPressed: onReply,
+                        icon: Icon(
+                          LucideIcons.reply,
+                          size: 14,
+                          color: colors.textMuted,
+                        ),
+                        tooltip: 'پاسخ',
+                      ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         constraints: const BoxConstraints(
@@ -848,16 +943,12 @@ class _AssistantBubble extends StatelessWidget {
     return raw.map((item) => '$item').where((id) => id.isNotEmpty).toList();
   }
 
-  List<ReportCardData> _reportsOf(ChatMessage message) {
+  List<Map<String, Object?>> _reportPayloadsOf(ChatMessage message) {
     final raw = message.metadata['reports'];
     if (raw is! List) return const [];
     return raw
         .whereType<Map>()
-        .map(
-          (item) => ReportCardData.fromJson(
-            item.map((key, value) => MapEntry('$key', value)),
-          ),
-        )
+        .map((item) => item.map((key, value) => MapEntry('$key', value)))
         .toList();
   }
 
@@ -955,7 +1046,8 @@ class _InfoMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.daram;
     return Align(
-      alignment: AlignmentDirectional.centerStart,
+      // Assistant-side notices sit on the physical left, opposite the user.
+      alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -994,11 +1086,13 @@ class _StreamingMessage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Row(
+        // Same physical-left treatment as a finished assistant message.
+        textDirection: TextDirection.ltr,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const DaramMark(size: 26),
           const SizedBox(width: 8),
-          Expanded(
+          Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
@@ -1119,6 +1213,9 @@ class _Composer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.daram;
     final focus = ref.watch(smsChatFocusProvider);
+    final replyTo = ref.watch(
+      chatControllerProvider.select((state) => state.replyTo),
+    );
     ref.listen<SmsChatFocus>(smsChatFocusProvider, (previous, next) {
       // Replying is a one-item action, so open the keyboard immediately.
       // Group selection stays keyboard-free until the user taps the composer,
@@ -1127,7 +1224,9 @@ class _Composer extends ConsumerWidget {
         focusNode.requestFocus();
       }
     });
-    final hint = focus.hasReply
+    final hint = replyTo != null
+        ? 'پاسخ به این پیام را بنویس…'
+        : focus.hasReply
         ? 'پاسخ به این پیشنهاد را بنویس…'
         : focus.hasSelection
         ? 'دستور برای موارد انتخاب‌شده…'
@@ -1144,6 +1243,7 @@ class _Composer extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (replyTo != null) _ReplyBar(message: replyTo),
             if (focus.hasContent) _SmsFocusBar(focus: focus),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -1210,6 +1310,63 @@ class _Composer extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReplyBar extends ConsumerWidget {
+  const _ReplyBar({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.daram;
+    final text = Theme.of(context).textTheme;
+    final preview = message.content.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: colors.accentSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.accent.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.reply, size: 15, color: colors.accent),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message.isUser ? 'پاسخ به پیام شما' : 'پاسخ به دارام',
+                  style: text.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  preview.isEmpty ? 'پیام' : preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(color: colors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () =>
+                ref.read(chatControllerProvider.notifier).clearReplyTo(),
+            tooltip: 'لغو پاسخ',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+            icon: Icon(LucideIcons.x, size: 15, color: colors.textMuted),
+          ),
+        ],
       ),
     );
   }

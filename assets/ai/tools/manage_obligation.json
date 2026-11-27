@@ -1,0 +1,29 @@
+{
+  "name": "manage_obligation",
+  "description": "ثبت، ویرایش، حذف یا ثبت پرداخت برای طلب/بدهی‌های غیررسمی (پول قرض‌داده‌شده یا قرض‌گرفته‌شده). action=create با طرف حساب، جهت و مبلغ؛ action=update برای تغییر نام/مبلغ/تاریخ/توضیح؛ action=add_payment برای ثبت پرداخت (payment_amount و payment_date)؛ action=delete برای حذف. طلب/بدهی در ارزش خالص لحاظ می‌شود ولی تراکنش درآمد/هزینه نیست.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["create", "update", "delete", "add_payment"],
+        "description": "عملیات موردنظر."
+      },
+      "obligation_id": { "type": "string", "description": "شناسه دقیق طلب/بدهی." },
+      "counterparty": { "type": "string", "description": "نام طرف حساب." },
+      "is_receivable": { "type": "boolean", "description": "true اگر کاربر طلبکار است (پول به او بدهکارند)؛ false اگر بدهکار است." },
+      "amount": { "type": "number", "minimum": 0, "description": "مبلغ کل طلب/بدهی." },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ."
+      },
+      "due_date": { "type": "string", "description": "تاریخ سررسید." },
+      "note": { "type": "string", "description": "توضیح اختیاری." },
+      "payment_amount": { "type": "number", "minimum": 0, "description": "مبلغ پرداخت برای action=add_payment." },
+      "payment_date": { "type": "string", "description": "تاریخ پرداخت برای action=add_payment." }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

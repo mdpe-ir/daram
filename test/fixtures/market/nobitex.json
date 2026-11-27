@@ -1,0 +1,50 @@
+{
+  "_note": "Hand-crafted from the Go structs in FC_Scraper internal/providers/nobitex.go; api.nobitex.ir does not resolve from the capture machine.",
+  "status": "ok",
+  "stats": {
+    "btc-rls": {
+      "isClosed": false,
+      "bestSell": "184040000000",
+      "bestBuy": "183860000000",
+      "latest": "183950000000",
+      "dayLow": "181000000000",
+      "dayHigh": "186200000000",
+      "dayChange": "1.25",
+      "volumeSrc": "0",
+      "volumeDst": "0"
+    },
+    "eth-rls": {
+      "isClosed": false,
+      "bestSell": "5152000000",
+      "bestBuy": "5148000000",
+      "latest": "5150000000",
+      "dayChange": "-0.42"
+    },
+    "usdt-rls": {
+      "isClosed": false,
+      "bestSell": "2935000",
+      "bestBuy": "2929000",
+      "latest": "2932000",
+      "dayChange": "0.08"
+    },
+    "xrp-rls": {
+      "isClosed": false,
+      "bestSell": "291200",
+      "bestBuy": "290800",
+      "latest": "291000",
+      "dayChange": "0.31"
+    },
+    "doge-rls": {
+      "isClosed": false,
+      "bestSell": "0",
+      "bestBuy": "0",
+      "latest": "0"
+    },
+    "sol-rls": {
+      "isClosed": false,
+      "bestSell": "n/a",
+      "bestBuy": "n/a",
+      "latest": "n/a"
+    }
+  }
+}

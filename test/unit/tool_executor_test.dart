@@ -19,6 +19,11 @@ import 'package:daram/features/loans/data/loan_repository.dart';
 import 'package:daram/features/sms/data/sms_review_repository.dart';
 import 'package:daram/features/transactions/data/operation_repository.dart';
 import 'package:daram/features/transactions/data/transaction_repository.dart';
+import 'package:daram/features/assets/data/asset_repository.dart';
+import 'package:daram/features/assets/domain/asset_quantity.dart';
+import 'package:daram/features/obligations/data/obligation_repository.dart';
+import 'package:daram/features/transactions/data/transfer_repository.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,6 +56,7 @@ void main() {
     final registry = await ToolRegistry.load(rootBundle);
     sms = SmsReviewRepository(db, transactions);
     chat = ChatRepository(db);
+    await chat.createSession(id: 'session-1', title: 'test');
     executor = ToolExecutor(
       registry: registry,
       accounts: accounts,
@@ -60,6 +66,9 @@ void main() {
       analytics: analytics,
       sms: sms,
       chat: chat,
+      assets: AssetRepository(db),
+      obligations: ObligationRepository(db),
+      transfers: TransferRepository(db, operations),
       parser: ArgumentParser(today: CalendarDate(2026, 11, 6)),
     );
   });
@@ -576,5 +585,323 @@ void main() {
     expect(result.ok, isFalse);
     expect(result.content, contains('مبلغ'));
     expect(await db.select(db.transactions).get(), isEmpty);
+  });
+
+  Future<String> persistDraft(ToolExecution execution) async {
+    final action = execution.pendingAction!;
+    await chat.addPendingActions([action]);
+    return action.id;
+  }
+
+  test('query_records returns ids and totals for transactions', () async {
+    final transactions = TransactionRepository(db, OperationRepository(db));
+    final account = (await accounts.list()).first;
+    await transactions.create(
+      type: TransactionType.expense,
+      amount: Rial.fromToman(120000),
+      accountId: account.id,
+      categoryId: 'cat_food',
+      date: CalendarDate(2026, 11, 6),
+      description: 'ناهار',
+      operationId: 'op-records-1',
+    );
+    final result = await run('query_records', {
+      'record_type': 'transactions',
+      'date_range': {'start': '2026-11-01', 'end': '2026-11-30'},
+    });
+    expect(result.ok, isTrue);
+    final content = jsonDecode(result.content) as Map;
+    final items = content['items'] as List;
+    expect(items, hasLength(1));
+    final item = items.single as Map;
+    expect(item['id'], isNotEmpty);
+    expect(item['amount_rial'], 1200000);
+    expect((content['totals'] as Map)['expense_rial'], 1200000);
+  });
+
+  test(
+    'get_financial_overview computes net worth from every section',
+    () async {
+      final assetRepository = AssetRepository(db);
+      await assetRepository.save(
+        name: 'طلای من',
+        kind: AssetKind.gold,
+        quantity: AssetQuantity.tryParse('2')!,
+        rate: Rial(30000000),
+        rateDate: DateTime.utc(2026, 11, 6),
+        isMarketRate: false,
+      );
+      final obligations = ObligationRepository(db);
+      await obligations.save(
+        counterparty: 'رضا',
+        isReceivable: true,
+        amount: Rial(5000000),
+      );
+      await obligations.save(
+        counterparty: 'سارا',
+        isReceivable: false,
+        amount: Rial(3000000),
+      );
+      final result = await run('get_financial_overview', {'months': 6});
+      expect(result.ok, isTrue, reason: result.content);
+      final content = jsonDecode(result.content) as Map;
+      final overview = content['overview'] as Map;
+      // 10,000,000 cash + 60,000,000 gold + 5,000,000 receivable - 3,000,000.
+      expect(overview['net_worth_rial'], 72000000);
+      expect(overview['cash_rial'], 10000000);
+      expect(overview['assets_rial'], 60000000);
+      expect(overview['receivables_rial'], 5000000);
+      expect(overview['payables_rial'], 3000000);
+      final health = overview['health'] as Map;
+      expect(health['score'], isA<int>());
+      expect(overview['roadmap'] as List, isNotEmpty);
+      expect(result.report, isNotNull);
+      expect(result.report!['kind'], 'financial_overview');
+    },
+  );
+
+  test('manage_transaction builds an update draft and keeps the id', () async {
+    final transactions = TransactionRepository(db, OperationRepository(db));
+    final account = (await accounts.list()).first;
+    final created = await transactions.create(
+      type: TransactionType.expense,
+      amount: Rial.fromToman(200000),
+      accountId: account.id,
+      categoryId: 'cat_food',
+      date: CalendarDate(2026, 11, 6),
+      description: 'ناهار',
+      operationId: 'op-manage-tx',
+    );
+    final result = await run('manage_transaction', {
+      'action': 'update',
+      'transaction_id': created.id,
+      'amount': 350000,
+      'amount_unit': 'toman',
+      'category': 'سفر',
+    });
+    expect(result.ok, isTrue, reason: result.content);
+    final payload = result.pendingAction!.payload;
+    expect(payload['recordType'], 'transaction');
+    expect(payload['action'], 'update');
+    expect(payload['recordId'], created.id);
+    final fields = payload['fields'] as Map;
+    expect(fields['amountRial'], 3500000);
+    expect(fields['categoryId'], 'cat_travel');
+    expect(fields['type'], 'expense');
+  });
+
+  test('manage_transaction finds a transaction by description', () async {
+    final transactions = TransactionRepository(db, OperationRepository(db));
+    final account = (await accounts.list()).first;
+    await transactions.create(
+      type: TransactionType.expense,
+      amount: Rial.fromToman(90000),
+      accountId: account.id,
+      categoryId: 'cat_food',
+      date: CalendarDate(2026, 11, 6),
+      description: 'تاکسی فرودگاه',
+      operationId: 'op-match-tx',
+    );
+    final result = await run('manage_transaction', {
+      'action': 'delete',
+      'match_description': 'فرودگاه',
+    });
+    expect(result.ok, isTrue, reason: result.content);
+    expect(result.pendingAction!.payload['action'], 'delete');
+  });
+
+  test('update_pending_draft revalidates and edits the same draft', () async {
+    final created = await run('add_transaction', {
+      'type': 'expense',
+      'amount': 250000,
+      'amount_unit': 'toman',
+      'date': 'امروز',
+      'category': 'خوراک و رستوران',
+      'account': 'ملت',
+      'description': 'ناهار',
+    });
+    final actionId = await persistDraft(created);
+    final updated = await run('update_pending_draft', {
+      'action_id': actionId,
+      'changes': {
+        'amount': 300000,
+        'amount_unit': 'toman',
+        'category': 'سفر',
+        'date': 'دیروز',
+      },
+    });
+    expect(updated.ok, isTrue, reason: updated.content);
+    final stored = (await chat.findPendingAction(actionId))!;
+    expect(stored.isPending, isTrue);
+    expect(stored.payload['amountRial'], 3000000);
+    expect(stored.payload['categoryId'], 'cat_travel');
+    expect(stored.payload['description'], 'ناهار');
+  });
+
+  test('a bare amount change keeps the user display unit', () async {
+    final created = await run('add_transaction', {
+      'type': 'expense',
+      'amount': 250000,
+      'amount_unit': 'toman',
+      'date': 'امروز',
+      'category': 'خوراک و رستوران',
+      'account': 'ملت',
+    });
+    final actionId = await persistDraft(created);
+    final updated = await run('update_pending_draft', {
+      'action_id': actionId,
+      'changes': {'amount': 300000},
+    });
+    expect(updated.ok, isTrue, reason: updated.content);
+    final stored = (await chat.findPendingAction(actionId))!;
+    // Default currency is Toman in this test, so 300,000 means 3,000,000 Rial.
+    expect(stored.payload['amountRial'], 3000000);
+  });
+
+  test('editing a transfer amount keeps the rial fee intact', () async {
+    await accounts.create(
+      bankId: 'blue',
+      bankName: 'بلو بانک',
+      accountName: 'بلو',
+      accountType: AccountType.bank,
+      initialBalance: Rial.zero,
+      operationId: 'op-blue-edit',
+    );
+    final created = await run('add_transfer', {
+      'source_account': 'ملت',
+      'destination_account': 'بلو',
+      'amount': 500000,
+      'amount_unit': 'toman',
+      'fee_amount': 5000,
+      'date': 'امروز',
+    });
+    expect(created.ok, isTrue, reason: created.content);
+    final actionId = await persistDraft(created);
+    final updated = await run('update_pending_draft', {
+      'action_id': actionId,
+      'changes': {'amount': 700000},
+    });
+    expect(updated.ok, isTrue, reason: updated.content);
+    final stored = (await chat.findPendingAction(actionId))!;
+    expect(stored.payload['amountRial'], 7000000);
+    expect(stored.payload['feeRial'], 50000);
+  });
+
+  test('an explicit toman unit also keeps the rial fee intact', () async {
+    await accounts.create(
+      bankId: 'blue',
+      bankName: 'بلو بانک',
+      accountName: 'بلو',
+      accountType: AccountType.bank,
+      initialBalance: Rial.zero,
+      operationId: 'op-blue-edit-2',
+    );
+    final created = await run('add_transfer', {
+      'source_account': 'ملت',
+      'destination_account': 'بلو',
+      'amount': 500000,
+      'amount_unit': 'toman',
+      'fee_amount': 5000,
+      'date': 'امروز',
+    });
+    final actionId = await persistDraft(created);
+    final updated = await run('update_pending_draft', {
+      'action_id': actionId,
+      'changes': {'amount': 900000, 'amount_unit': 'toman'},
+    });
+    expect(updated.ok, isTrue, reason: updated.content);
+    final stored = (await chat.findPendingAction(actionId))!;
+    expect(stored.payload['amountRial'], 9000000);
+    expect(stored.payload['feeRial'], 50000);
+  });
+
+  test('cancel_pending_draft rejects the draft without writing', () async {
+    final created = await run('add_transaction', {
+      'type': 'expense',
+      'amount': 250000,
+      'amount_unit': 'toman',
+      'date': 'امروز',
+      'category': 'خوراک و رستوران',
+      'account': 'ملت',
+    });
+    final actionId = await persistDraft(created);
+    final cancelled = await run('cancel_pending_draft', {
+      'action_id': actionId,
+    });
+    expect(cancelled.ok, isTrue, reason: cancelled.content);
+    final stored = (await chat.findPendingAction(actionId))!;
+    expect(stored.isPending, isFalse);
+    expect(stored.status.labelFa, 'رد شده');
+    expect(await db.select(db.transactions).get(), isEmpty);
+  });
+
+  test('manage_account archives and manage_loan deletes by id', () async {
+    final account = (await accounts.list()).first;
+    final archive = await run('manage_account', {
+      'action': 'archive',
+      'account_id': account.id,
+    });
+    expect(archive.ok, isTrue, reason: archive.content);
+    expect(archive.pendingAction!.payload['action'], 'archive');
+
+    final loans = LoanRepository(db, OperationRepository(db));
+    final loan = await loans.create(
+      title: 'وام تست',
+      principal: Rial.fromToman(1000000),
+      installmentCount: 2,
+      startDate: CalendarDate(2026, 11, 1),
+      dueDates: [CalendarDate(2026, 12, 1), CalendarDate(2027, 1, 1)],
+      operationId: 'op-loan-manage',
+    );
+    final delete = await run('manage_loan', {
+      'action': 'delete',
+      'loan_id': loan.id,
+    });
+    expect(delete.ok, isTrue, reason: delete.content);
+    expect(delete.pendingAction!.payload['action'], 'delete');
+  });
+
+  test('manage_asset and manage_obligation build canonical drafts', () async {
+    final asset = await run('manage_asset', {
+      'action': 'create',
+      'name': 'دلار نقدی',
+      'kind': 'currency',
+      'currency_code': 'USD',
+      'quantity': 100,
+      'rate': 100000,
+      'amount_unit': 'toman',
+    });
+    expect(asset.ok, isTrue, reason: asset.content);
+    final fields = asset.pendingAction!.payload['fields'] as Map;
+    expect(fields['kind'], 'currency');
+    expect(fields['quantityMicros'], 100000000);
+    expect(fields['rateRial'], 1000000);
+
+    final obligation = await run('manage_obligation', {
+      'action': 'create',
+      'counterparty': 'علی',
+      'is_receivable': false,
+      'amount': 500000,
+      'amount_unit': 'toman',
+    });
+    expect(obligation.ok, isTrue, reason: obligation.content);
+    final obligationFields = obligation.pendingAction!.payload['fields'] as Map;
+    expect(obligationFields['isReceivable'], isFalse);
+    expect(obligationFields['amountRial'], 5000000);
+  });
+
+  test('update_settings reports an immediate settings change', () async {
+    final result = await run('update_settings', {
+      'theme_mode': 'dark',
+      'currency_unit': 'rial',
+      'persian_digits': false,
+    });
+    expect(result.ok, isTrue, reason: result.content);
+    expect(result.pendingAction, isNull);
+    final change = result.settingsChange!;
+    expect(change.themeMode, ThemeMode.dark);
+    expect(change.currencyUnit, CurrencyUnit.rial);
+    expect(change.persianDigits, isFalse);
+    expect(change.summaryFa, contains('تاریک'));
   });
 }

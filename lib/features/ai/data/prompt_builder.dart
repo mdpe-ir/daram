@@ -11,8 +11,13 @@ import '../../../core/money/currency.dart';
 import '../../../core/time/calendar_date.dart';
 import '../../../core/time/jalali_text.dart';
 import '../../accounts/domain/account.dart';
+import '../../assets/domain/asset_holding.dart';
 import '../../categories/domain/category.dart';
+import '../../chat/domain/chat_models.dart';
+import '../../chat/domain/drafts.dart';
 import '../../loans/domain/loan.dart';
+import '../../transactions/domain/transaction_record.dart';
+import '../../obligations/domain/obligation.dart';
 import '../domain/ai_models.dart';
 
 /// Dynamic values injected into the Persian system prompt.
@@ -23,6 +28,12 @@ class PromptContext {
     required this.accounts,
     required this.categories,
     required this.loans,
+    this.assets = const <AssetHolding>[],
+    this.obligations = const <Obligation>[],
+    this.pendingActions = const <PendingAction>[],
+    this.recentOperations = const <FinancialOperation>[],
+    this.recentTransactions = const <TransactionRecord>[],
+    this.replyTo,
     this.tools = const <ToolDefinition>[],
     this.toolMode = AIToolMode.native,
   });
@@ -32,6 +43,24 @@ class PromptContext {
   final List<AccountWithBalance> accounts;
   final List<Category> categories;
   final List<Loan> loans;
+
+  /// Valued holdings shown to the model so it can discuss the portfolio.
+  final List<AssetHolding> assets;
+
+  /// Informal receivables/payables (money lent to or borrowed from people).
+  final List<Obligation> obligations;
+
+  /// Drafts that are still waiting for the user's confirmation.
+  final List<PendingAction> pendingActions;
+
+  /// Recently applied operations, for continuity across turns.
+  final List<FinancialOperation> recentOperations;
+
+  /// The newest transactions, so the model can reference and edit them by id.
+  final List<TransactionRecord> recentTransactions;
+
+  /// The message the user is replying to, when they quoted one.
+  final ChatMessage? replyTo;
 
   /// Bundled tool definitions, so the model knows every tool by name even when
   /// the provider does not support native tool calling.
@@ -127,6 +156,74 @@ class PromptBuilder {
         ? '  (نمونه‌ای بارگذاری نشده است.)'
         : examples.map(_formatExample).join('\n');
 
+    final assetsText = context.assets.isEmpty
+        ? '  (دارایی ثبت نشده است.)'
+        : context.assets
+              .map((asset) {
+                final rate = asset.rateRial;
+                final value = asset.estimatedValue;
+                return '  - ${asset.name} | ${asset.kind.label} | مقدار: ${asset.quantity.decimal} ${asset.unitLabel} '
+                    '| نرخ: ${rate == null ? 'بدون نرخ' : money.format(rate)} '
+                    '| ارزش تخمینی: ${value == null ? '—' : money.format(value)} '
+                    '| شناسه: ${asset.id}';
+              })
+              .join('\n');
+
+    final obligationsText = context.obligations.isEmpty
+        ? '  (طلب یا بدهی ثبت نشده است.)'
+        : context.obligations
+              .map((item) {
+                return '  - ${item.counterparty} | ${item.isReceivable ? 'طلب' : 'بدهی'} '
+                    '| مبلغ: ${money.format(item.amount)} | مانده: ${money.format(item.remaining)} '
+                    '| سررسید: ${item.dueDate == null ? '—' : JalaliText(persianDigits: false).date(item.dueDate!)} '
+                    '| شناسه: ${item.id}';
+              })
+              .join('\n');
+
+    final pendingText = context.pendingActions.isEmpty
+        ? '  (پیش‌نویس بازی وجود ندارد.)'
+        : context.pendingActions
+              .map((action) {
+                final draft = FinancialDraft.fromPendingAction(action);
+                final title =
+                    draft?.title ??
+                    (action.payload['summary'] ?? 'پیش‌نویس مالی');
+                return '  - شناسه: ${action.id} | ابزار: ${action.actionType} '
+                    '| عنوان: $title | وضعیت: در انتظار تأیید '
+                    '| جزئیات: ${jsonEncode(action.payload)}';
+              })
+              .join('\n');
+
+    final operationsText = context.recentOperations.isEmpty
+        ? '  (عملیات اخیری ثبت نشده است.)'
+        : context.recentOperations
+              .map((operation) {
+                return '  - ${operation.summary} | نوع: ${operation.kind.labelFa} '
+                    '| وضعیت: ${operation.status} '
+                    '| زمان: ${JalaliText(persianDigits: false).date(CalendarDate.fromDateTime(operation.createdAt.toLocal()))}';
+              })
+              .join('\n');
+
+    final recentTransactionsText = context.recentTransactions.isEmpty
+        ? '  (تراکنشی ثبت نشده است.)'
+        : context.recentTransactions
+              .map((row) {
+                final date = CalendarDate.fromStored(row.transactionDate);
+                return '  - شناسه: ${row.id} | ${row.type.labelFa} | ${money.format(row.amountRial)} '
+                    '| دسته: ${row.categoryName ?? 'بدون دسته'} | حساب: ${row.accountName ?? '—'} '
+                    '| تاریخ: ${JalaliText(persianDigits: false).date(date)} '
+                    '| توضیح: ${row.description ?? '—'}';
+              })
+              .join('\n');
+
+    final reply = context.replyTo;
+    final replyText = reply == null
+        ? '  (کاربر به پیام مشخصی پاسخ نداده است.)'
+        : '  کاربر به این پیام ${reply.isUser ? 'خودش' : 'دستیار'} پاسخ داده است:\n'
+              '  «${_truncate(reply.content, 700)}»';
+
+    final todayText = today.toIso();
+
     final values = <String, String>{
       '{{current_datetime}}':
           '${now.year}-${formatter.format(now.month)}-${formatter.format(now.day)} $time',
@@ -150,6 +247,13 @@ class PromptBuilder {
           .map((option) => '${option.nameFa} (${option.hex})')
           .join('، '),
       '{{examples}}': examplesText,
+      '{{assets}}': assetsText,
+      '{{obligations}}': obligationsText,
+      '{{pending_drafts}}': pendingText,
+      '{{recent_operations}}': operationsText,
+      '{{recent_transactions}}': recentTransactionsText,
+      '{{reply_context}}': replyText,
+      '{{today}}': todayText,
     };
 
     var prompt = template;
@@ -157,6 +261,11 @@ class PromptBuilder {
       prompt = prompt.replaceAll(entry.key, entry.value);
     }
     return prompt;
+  }
+
+  String _truncate(String value, int max) {
+    final trimmed = value.trim();
+    return trimmed.length <= max ? trimmed : '${trimmed.substring(0, max)}…';
   }
 
   String _formatTool(ToolDefinition tool) {

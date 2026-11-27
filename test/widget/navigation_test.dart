@@ -172,7 +172,7 @@ void main() {
     await tester.tap(find.text('دارایی'));
     await tester.pumpAndSettle();
     expect(find.text('ثبت دارایی'), findsOneWidget);
-    expect(find.text('دریافت نرخ طلای ۱۸ عیار'), findsOneWidget);
+    expect(find.text('دریافت نرخ طلای ۱۸ عیار از بازار'), findsOneWidget);
     await enter('نام دارایی', 'طلای من');
     await enter('وزن به گرم', '۲٫۲۵');
     await enter('نرخ هر گرم (اختیاری)', '1000000');
@@ -220,7 +220,7 @@ void main() {
     await tester.tap(find.text('بیت‌کوین'));
     await tester.pumpAndSettle();
     expect(fieldText('نام دارایی'), 'بیت‌کوین');
-    expect(find.text('دریافت نرخ بیت‌کوین از نوسان'), findsOneWidget);
+    expect(find.text('دریافت نرخ بیت‌کوین از بازار'), findsOneWidget);
     await enter('مقدار رمزارز', '0.5');
     await tester.tap(find.text('ذخیره'));
     await tester.pumpAndSettle();
@@ -236,10 +236,7 @@ void main() {
     await tester.tap(find.text('اتریوم'));
     await tester.pumpAndSettle();
     expect(fieldText('نام دارایی'), 'اتریوم');
-    expect(
-      find.text('نرخ زندهٔ این رمزارز در دسترس نیست؛ نرخ را دستی وارد کن.'),
-      findsOneWidget,
-    );
+    expect(find.text('دریافت نرخ اتریوم از بازار'), findsOneWidget);
     await tester.tap(find.text('ذخیره'));
     await tester.pumpAndSettle();
     expect(find.text('اتریوم'), findsOneWidget);

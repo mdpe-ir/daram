@@ -1,0 +1,17 @@
+{
+  "name": "update_pending_draft",
+  "description": "ویرایش یک پیش‌نویس مالی باز (در انتظار تأیید کاربر) با شناسه آن. هرگاه کاربر گفت «همون پیش‌نویس را عوض کن»، «مبلغش را بکن...»، «دسته‌اش را...»، «تاریخش را...» و پیش‌نویس قبلی هنوز باز است، از این ابزار استفاده کن و پیش‌نویس جدید نساز. شناسه پیش‌نویس را از بخش «پیش‌نویس‌های باز» در زمینه یا از خروجی ابزارهای قبلی بردار. فقط فیلدهایی را بفرست که کاربر تغییر داده است؛ بقیه فیلدها حفظ می‌شوند.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action_id": { "type": "string", "description": "شناسه دقیق پیش‌نویس باز." },
+      "changes": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "فیلدهای جدید. برای تراکنش: amount، amount_unit، date، account، category، description، type. برای انتقال: amount، amount_unit، date، source_account، destination_account، fee_amount، description. برای حساب: account_name، bank_name، account_type، card_last_four_digits، description. برای وام: title، description. برای دارایی: name، kind، currency_code، quantity، rate، amount_unit، rate_date، use_market_rate. برای طلب/بدهی: counterparty، is_receivable، amount، amount_unit، due_date، note، payment_amount، payment_date."
+      }
+    },
+    "required": ["action_id", "changes"],
+    "additionalProperties": false
+  }
+}

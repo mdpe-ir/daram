@@ -1,0 +1,30 @@
+{
+  "name": "manage_account",
+  "description": "ویرایش، بایگانی یا بازگردانی یک حساب موجود. برای تغییر نام حساب، بانک، نوع، چهار رقم آخر کارت یا توضیح از action=update استفاده کن؛ برای پنهان کردن حساب بدون حذف تاریخچه action=archive و برای برگرداندن آن action=unarchive. حذف کامل حساب ابزار جدا ندارد و فقط برای حساب بدون تراکنش از بایگانی استفاده کن. شناسه حساب را از زمینه یا query_records بردار.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["update", "archive", "unarchive"],
+        "description": "عملیات موردنظر."
+      },
+      "account_id": { "type": "string", "description": "شناسه دقیق حساب." },
+      "account_name": { "type": "string", "description": "نام جدید حساب." },
+      "bank_name": { "type": "string", "description": "نام بانک یا نئوبانک جدید." },
+      "account_type": {
+        "type": "string",
+        "enum": ["bank", "cash", "digitalWallet", "savings", "other"],
+        "description": "نوع جدید حساب."
+      },
+      "card_last_four_digits": {
+        "type": "string",
+        "pattern": "^[0-9]{4}$",
+        "description": "چهار رقم آخر کارت؛ فقط اگر کاربر گفت."
+      },
+      "description": { "type": "string", "description": "توضیح جدید حساب." }
+    },
+    "required": ["action", "account_id"],
+    "additionalProperties": false
+  }
+}

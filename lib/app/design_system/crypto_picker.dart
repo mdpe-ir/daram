@@ -101,11 +101,7 @@ class CryptoBadge extends StatelessWidget {
     Widget fallback() => Container(
       color: colors.surfaceMuted,
       alignment: Alignment.center,
-      child: Icon(
-        LucideIcons.coins,
-        size: size * 0.5,
-        color: colors.textMuted,
-      ),
+      child: Icon(LucideIcons.coins, size: size * 0.5, color: colors.textMuted),
     );
     return Container(
       width: size,
@@ -378,9 +374,7 @@ class _CustomSymbolDialogState extends State<_CustomSymbolDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = context.daram;
-    final canSubmit = _valid.hasMatch(
-      _controller.text.trim().toUpperCase(),
-    );
+    final canSubmit = _valid.hasMatch(_controller.text.trim().toUpperCase());
     return AlertDialog(
       backgroundColor: colors.surface,
       title: const Text('رمزارز دیگر'),

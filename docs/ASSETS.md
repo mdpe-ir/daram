@@ -19,7 +19,7 @@ DARAM does not load any image, icon or font from the network at runtime. Everyth
 ## Cryptocurrency icons
 
 - **Source:** [github.com/spothq/cryptocurrency-icons](https://github.com/spothq/cryptocurrency-icons), `svg/color/*.svg`.
-- **Files:** `assets/crypto/{symbol}.svg` — 34 coins (lowercase ticker), used by the crypto picker and holding rows. The catalog lives in `lib/core/constants/crypto_assets.dart`.
+- **Files:** `assets/crypto/{symbol}.svg` — 35 coins (lowercase ticker), used by the crypto picker and holding rows. The catalog lives in `lib/core/constants/crypto_assets.dart`. 34 icons come from the upstream set; `ton.svg` is a simplified Toncoin mark drawn for this project and used only to identify the coin.
 - **License:** CC0 1.0 Universal. Full text: `assets/crypto/LICENSE.md`.
 - **Changes:** in `ada.svg`, `grt.svg` and `mana.svg` the unused SVG filters (drop shadow / colour matrix) were removed because the bundled renderer does not support them; the visible artwork is unchanged.
 - **Usage:** coin logos identify the user's own holdings and remain trademarks of their owners.

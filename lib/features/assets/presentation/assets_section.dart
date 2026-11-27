@@ -111,9 +111,9 @@ String _quoteTime(DaramFormat format, DateTime timestamp) {
 }
 
 String _marketLabel(AssetKind kind) => switch (kind) {
-  AssetKind.gold => 'نوسان · طلای ۱۸ عیار',
-  AssetKind.silver => 'نوسان · نقرهٔ خالص',
-  AssetKind.currency || AssetKind.crypto => 'نوسان',
+  AssetKind.gold => 'نرخ زنده بازار · طلای ۱۸ عیار',
+  AssetKind.silver => 'نرخ زنده بازار · نقرهٔ خالص',
+  AssetKind.currency || AssetKind.crypto => 'نرخ زنده بازار',
 };
 
 /// Small leading mark for a holding: kind icon for bullion, the flag or coin
@@ -261,6 +261,7 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
   bool _initialized = false;
   bool _fetching = false;
   String? _quoteError;
+  String? _quoteSource;
 
   /// The code saved for the current kind: an ISO currency code or a coin
   /// symbol. Both live in the same database column.
@@ -300,6 +301,7 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
     _rateDate = null;
     _market = false;
     _quoteError = null;
+    _quoteSource = null;
     _rateText.clear();
   }
 
@@ -362,19 +364,22 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
     });
   }
 
-  /// True when the rate source can quote the current holding.
-  bool get _canFetch =>
-      _kind != AssetKind.crypto ||
-      (cryptoBySymbol(_cryptoCode)?.hasQuote ?? false);
+  /// True when DARAM's own market sources can quote the current holding.
+  bool get _canFetch {
+    if (_kind == AssetKind.gold || _kind == AssetKind.silver) return true;
+    final code = _code.trim();
+    if (code.isEmpty) return false;
+    return ref.read(marketPriceServiceProvider).supports(_kind, code);
+  }
 
   String get _fetchLabel {
     if (_fetching) return 'در حال دریافت نرخ…';
     return switch (_kind) {
-      AssetKind.gold => 'دریافت نرخ طلای ۱۸ عیار',
-      AssetKind.silver => 'دریافت نرخ نقرهٔ خالص',
-      AssetKind.currency => 'دریافت نرخ ارز از نوسان',
+      AssetKind.gold => 'دریافت نرخ طلای ۱۸ عیار از بازار',
+      AssetKind.silver => 'دریافت نرخ نقرهٔ خالص از بازار',
+      AssetKind.currency => 'دریافت نرخ ارز از بازار',
       AssetKind.crypto =>
-        'دریافت نرخ ${cryptoBySymbol(_cryptoCode)?.nameFa ?? _cryptoCode} از نوسان',
+        'دریافت نرخ ${cryptoBySymbol(_cryptoCode)?.nameFa ?? _cryptoCode} از بازار',
     };
   }
 
@@ -395,20 +400,21 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
     });
     try {
       final quote = await ref
-          .read(navasanRatesProvider)
-          .fetch(_kind, currencyCode: _code);
+          .read(marketPriceServiceProvider)
+          .quoteForAsset(_kind, code: _code);
       if (!mounted) return;
       final format = DaramFormat.of(context);
       setState(() {
         _market = true;
         _rate = quote.rate;
         _rateDate = quote.updatedAt;
+        _quoteSource = quote.source;
         _rateText.text = format.money.formatPlain(quote.rate);
       });
     } on AppException catch (error) {
       _quoteError = error.message;
     } on Object {
-      _quoteError = 'دریافت نرخ از نوسان انجام نشد. دوباره تلاش کن.';
+      _quoteError = 'دریافت نرخ از منابع بازار انجام نشد. دوباره تلاش کن.';
     } finally {
       if (mounted) setState(() => _fetching = false);
     }
@@ -550,7 +556,10 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
             ),
           ],
           if (_market && _rateDate != null)
-            Text('${_marketLabel(_kind)} · ${_quoteTime(format, _rateDate!)}'),
+            Text(
+              '${_quoteSource == null ? _marketLabel(_kind) : 'نرخ زنده بازار · $_quoteSource'}'
+              ' · ${_quoteTime(format, _rateDate!)}',
+            ),
           if (_quoteError case final error?)
             Text(error, style: TextStyle(color: context.daram.expense)),
           const SizedBox(height: 8),
@@ -565,7 +574,7 @@ class _AssetEditorState extends ConsumerState<_AssetEditor> {
             )
           else
             Text(
-              'نرخ زندهٔ این رمزارز در دسترس نیست؛ نرخ را دستی وارد کن.',
+              'نرخ زندهٔ این مورد در منابع بازار در دسترس نیست؛ نرخ را دستی وارد کن.',
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: context.daram.textMuted),
             ),

@@ -1,0 +1,12 @@
+{
+  "name": "cancel_pending_draft",
+  "description": "لغو (رد کردن) یک پیش‌نویس مالی باز که کاربر دیگر آن را نمی‌خواهد. شناسه را از بخش «پیش‌نویس‌های باز» در زمینه بردار. این ابزار چیزی در پایگاه داده ثبت نمی‌کند و فقط پیش‌نویس را می‌بندد.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action_id": { "type": "string", "description": "شناسه دقیق پیش‌نویس باز." }
+    },
+    "required": ["action_id"],
+    "additionalProperties": false
+  }
+}

@@ -124,6 +124,7 @@ class TransactionRepository {
     CalendarDate? date,
     String? description,
     bool clearCategory = false,
+    bool clearDescription = false,
   }) async {
     final current = await findById(id);
     if (current == null) throw const NotFoundException('تراکنش پیدا نشد.');
@@ -165,7 +166,11 @@ class TransactionRepository {
           accountId: Value(newAccountId),
           categoryId: Value(category?.id),
           transactionDate: Value(newDate.stored),
-          description: Value(description?.trim() ?? current.description),
+          description: Value(
+            clearDescription
+                ? null
+                : (description?.trim() ?? current.description),
+          ),
           updatedAt: Value(now),
         ),
       );

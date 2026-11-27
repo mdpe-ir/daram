@@ -3,6 +3,8 @@ import 'package:shamsi_date/shamsi_date.dart';
 import '../../core/money/rial.dart';
 import '../../core/time/calendar_date.dart';
 import '../../features/accounts/domain/account.dart';
+import '../../features/assets/domain/asset_holding.dart';
+import '../../features/assets/domain/asset_quantity.dart';
 import '../../features/categories/domain/category.dart';
 import '../../features/chat/domain/chat_models.dart';
 import '../../features/loans/domain/loan.dart';
@@ -170,6 +172,20 @@ extension FinancialOperationRowX on FinancialOperationRow {
     status: status,
     createdAt: createdAt,
     undoneAt: undoneAt,
+  );
+}
+
+extension AssetHoldingRowX on AssetHoldingRow {
+  AssetHolding toDomain() => AssetHolding(
+    id: id,
+    name: name,
+    kind: kind,
+    currencyCode: currencyCode,
+    quantity: AssetQuantity.fromMicros(quantityMicros),
+    rateRial: rateRial == null ? null : Rial(rateRial!),
+    rateDate: rateDate,
+    isMarketRate: isMarketRate,
+    createdAt: createdAt,
   );
 }
 

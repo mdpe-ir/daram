@@ -1,0 +1,24 @@
+{
+  "name": "manage_loan",
+  "description": "ویرایش، بایگانی یا حذف یک وام. با action=update فقط عنوان، توضیح یا وضعیت وام را می‌توان تغییر داد؛ اصل، اقساط و پرداخت‌ها تغییر نمی‌کنند (برای تغییر ساختار، وام را حذف و دوباره ثبت کن). با action=archive وام از فهرست فعال خارج می‌شود و با action=delete وام، جدول اقساط و اثرهای مالی آن حذف می‌شود. شناسه وام را از زمینه یا query_records بردار.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["update", "archive", "delete"],
+        "description": "عملیات موردنظر."
+      },
+      "loan_id": { "type": "string", "description": "شناسه دقیق وام." },
+      "title": { "type": "string", "description": "عنوان جدید وام." },
+      "description": { "type": "string", "description": "توضیح جدید وام." },
+      "status": {
+        "type": "string",
+        "enum": ["active", "closed", "archived"],
+        "description": "وضعیت جدید وام برای action=update."
+      }
+    },
+    "required": ["action", "loan_id"],
+    "additionalProperties": false
+  }
+}

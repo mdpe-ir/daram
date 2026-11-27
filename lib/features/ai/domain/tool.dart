@@ -12,11 +12,22 @@ enum DaramTool {
   addLoan('add_loan'),
   markInstallmentPaid('mark_installment_paid'),
   queryTransactions('query_transactions'),
+  queryRecords('query_records'),
+  financialOverview('get_financial_overview'),
   generateReport('generate_report'),
   reviewSmsSuggestions('review_sms_suggestions'),
   confirmSmsSuggestion('confirm_sms_suggestion'),
   editSmsSuggestion('edit_sms_suggestion'),
-  dismissSmsSuggestion('dismiss_sms_suggestion');
+  dismissSmsSuggestion('dismiss_sms_suggestion'),
+  updatePendingDraft('update_pending_draft'),
+  cancelPendingDraft('cancel_pending_draft'),
+  manageAccount('manage_account'),
+  manageTransaction('manage_transaction'),
+  manageTransfer('manage_transfer'),
+  manageLoan('manage_loan'),
+  manageAsset('manage_asset'),
+  manageObligation('manage_obligation'),
+  updateSettings('update_settings');
 
   const DaramTool(this.toolName);
 
@@ -41,9 +52,20 @@ enum DaramTool {
     DaramTool.markInstallmentPaid ||
     DaramTool.confirmSmsSuggestion ||
     DaramTool.editSmsSuggestion ||
-    DaramTool.dismissSmsSuggestion => true,
+    DaramTool.dismissSmsSuggestion ||
+    DaramTool.updatePendingDraft ||
+    DaramTool.cancelPendingDraft ||
+    DaramTool.manageAccount ||
+    DaramTool.manageTransaction ||
+    DaramTool.manageTransfer ||
+    DaramTool.manageLoan ||
+    DaramTool.manageAsset ||
+    DaramTool.manageObligation ||
+    DaramTool.updateSettings => true,
     DaramTool.manageCategory ||
     DaramTool.queryTransactions ||
+    DaramTool.queryRecords ||
+    DaramTool.financialOverview ||
     DaramTool.generateReport ||
     DaramTool.reviewSmsSuggestions => false,
   };

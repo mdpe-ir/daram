@@ -8,6 +8,8 @@ import '../../../app/theme/daram_colors.dart';
 import '../../../core/domain/enums.dart';
 import '../../../core/formatting/persian_formatting.dart';
 import '../../../core/money/rial.dart';
+import '../../../core/time/calendar_date.dart';
+import '../../assets/domain/asset_quantity.dart';
 import '../../settings/domain/app_settings.dart';
 import '../domain/chat_models.dart';
 import '../domain/drafts.dart';
@@ -45,6 +47,8 @@ class _PendingActionCardState extends ConsumerState<PendingActionCard> {
       AccountDraft() => colors.accent,
       LoanDraft() => colors.warning,
       InstallmentPaymentDraft() => colors.income,
+      RecordChangeDraft(:final action) =>
+        action == 'delete' ? colors.expense : colors.accent,
     };
     final icon = switch (draft) {
       TransactionDraft(:final type) =>
@@ -55,6 +59,14 @@ class _PendingActionCardState extends ConsumerState<PendingActionCard> {
       AccountDraft() => LucideIcons.landmark,
       LoanDraft() => LucideIcons.banknote,
       InstallmentPaymentDraft() => LucideIcons.calendarCheck,
+      RecordChangeDraft(:final action) => switch (action) {
+        'delete' => LucideIcons.trash2,
+        'archive' => LucideIcons.archive,
+        'unarchive' => LucideIcons.archiveRestore,
+        'create' => LucideIcons.plus,
+        'add_payment' => LucideIcons.handCoins,
+        _ => LucideIcons.pencil,
+      },
     };
 
     return Container(
@@ -92,7 +104,9 @@ class _PendingActionCardState extends ConsumerState<PendingActionCard> {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       Text(
-                        'پیش‌نویس مالی',
+                        draft is RecordChangeDraft
+                            ? _recordActionLabel(draft.action)
+                            : 'پیش‌نویس مالی',
                         style: Theme.of(context).textTheme.labelSmall
                             ?.copyWith(color: colors.textMuted),
                       ),
@@ -183,11 +197,12 @@ class _PendingActionCardState extends ConsumerState<PendingActionCard> {
                     child: _ConfirmButton(busy: _busy, onTap: _confirm),
                   ),
                   const SizedBox(width: 8),
-                  _SmallAction(
-                    icon: LucideIcons.pencil,
-                    label: 'ویرایش',
-                    onTap: _busy ? null : _edit,
-                  ),
+                  if (draft is! RecordChangeDraft)
+                    _SmallAction(
+                      icon: LucideIcons.pencil,
+                      label: 'ویرایش',
+                      onTap: _busy ? null : _edit,
+                    ),
                   const SizedBox(width: 4),
                   _SmallAction(
                     icon: LucideIcons.x,
@@ -331,6 +346,8 @@ class _DraftDetails extends StatelessWidget {
               d.dueDates.isEmpty ? '—' : format.dates.date(d.dueDates.first),
             ),
           ));
+      case final RecordChangeDraft d:
+        rows.addAll(_recordRows(context, format, d));
       case final InstallmentPaymentDraft d:
         rows
           ..add(('وام', _text(context, d.loanTitle)))
@@ -389,6 +406,139 @@ class _DraftDetails extends StatelessWidget {
     style: Theme.of(context).textTheme.titleSmall,
     color: color,
   );
+
+  static const _fieldLabels = <String, String>{
+    'type': 'نوع',
+    'amountRial': 'مبلغ',
+    'feeRial': 'کارمزد',
+    'accountName': 'حساب',
+    'categoryName': 'دسته‌بندی',
+    'date': 'تاریخ',
+    'description': 'توضیح',
+    'bankName': 'بانک',
+    'accountType': 'نوع حساب',
+    'cardLastFour': 'چهار رقم آخر',
+    'title': 'عنوان',
+    'sourceAccountName': 'از حساب',
+    'destinationAccountName': 'به حساب',
+    'name': 'نام',
+    'kind': 'نوع دارایی',
+    'currencyCode': 'کد',
+    'quantityMicros': 'مقدار',
+    'rateRial': 'نرخ',
+    'rateDate': 'تاریخ نرخ',
+    'isMarketRate': 'منبع نرخ',
+    'counterparty': 'طرف حساب',
+    'isReceivable': 'جهت',
+    'dueDate': 'سررسید',
+    'note': 'توضیح',
+    'status': 'وضعیت',
+  };
+
+  List<(String, Widget)> _recordRows(
+    BuildContext context,
+    DaramFormat format,
+    RecordChangeDraft draft,
+  ) {
+    final rows = <(String, Widget)>[];
+    for (final entry in draft.fields.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      if (value == null || key.endsWith('Id')) continue;
+      final label = _fieldLabels[key];
+      if (label == null) continue;
+      final widget = _recordValue(context, format, key, value, draft);
+      if (widget != null) rows.add((label, widget));
+    }
+    if (draft.action == 'delete') {
+      rows.add((
+        'هشدار',
+        Text(
+          'این رکورد پس از تأیید حذف می‌شود.',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.daram.expense),
+        ),
+      ));
+    }
+    return rows;
+  }
+
+  Widget? _recordValue(
+    BuildContext context,
+    DaramFormat format,
+    String key,
+    Object value,
+    RecordChangeDraft draft,
+  ) {
+    if (key.endsWith('Rial') && value is num) {
+      return _strong(
+        context,
+        Rial(value.toInt()),
+        value.toInt() < 0 ? context.daram.expense : context.daram.textPrimary,
+      );
+    }
+    if (key == 'quantityMicros' && value is num) {
+      final quantity = AssetQuantity.fromMicros(value.toInt());
+      final code = draft.fields['currencyCode'];
+      final unit = code is String && code.isNotEmpty
+          ? code
+          : (draft.fields['kind'] == 'silver' ? 'گرم نقره' : 'گرم');
+      return _text(context, '${quantity.decimal} $unit');
+    }
+    if (key == 'date' || key == 'dueDate') {
+      final parsed = DateTime.tryParse('$value');
+      if (parsed != null) {
+        return _text(
+          context,
+          format.dates.date(CalendarDate.fromDateTime(parsed.toLocal())),
+        );
+      }
+    }
+    if (key == 'rateDate') {
+      final parsed = DateTime.tryParse('$value');
+      if (parsed != null) {
+        return _text(
+          context,
+          format.dates.date(CalendarDate.fromDateTime(parsed.toLocal())),
+        );
+      }
+    }
+    if (key == 'type') {
+      return _text(
+        context,
+        value == 'income'
+            ? TransactionType.income.labelFa
+            : TransactionType.expense.labelFa,
+      );
+    }
+    if (key == 'isReceivable') {
+      return _text(context, value == true ? 'طلب' : 'بدهی');
+    }
+    if (key == 'isMarketRate') {
+      return _text(context, value == true ? 'نرخ زنده بازار' : 'نرخ دستی');
+    }
+    if (key == 'accountType') {
+      return _text(context, AccountType.fromStorage('$value').labelFa);
+    }
+    if (key == 'kind') {
+      return _text(context, switch ('$value') {
+        'gold' => 'طلا',
+        'silver' => 'نقره',
+        'currency' => 'ارز',
+        'crypto' => 'رمزارز',
+        _ => '$value',
+      });
+    }
+    if (key == 'status') {
+      return _text(context, switch ('$value') {
+        'active' => 'در جریان',
+        'closed' => 'تسویه شده',
+        'archived' => 'بایگانی',
+        _ => '$value',
+      });
+    }
+    return _text(context, '$value');
+  }
 }
 
 class _ConfirmButton extends StatelessWidget {
@@ -476,3 +626,12 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
+String _recordActionLabel(String action) => switch (action) {
+  'delete' => 'پیش‌نویس حذف',
+  'archive' => 'پیش‌نویس بایگانی',
+  'unarchive' => 'پیش‌نویس بازگردانی',
+  'create' => 'پیش‌نویس ثبت',
+  'add_payment' => 'پیش‌نویس پرداخت',
+  _ => 'پیش‌نویس ویرایش',
+};

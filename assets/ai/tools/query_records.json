@@ -1,0 +1,48 @@
+{
+  "name": "query_records",
+  "description": "خواندن رکوردهای ذخیره‌شده در هر بخش برنامه: حساب‌ها، تراکنش‌ها، انتقال‌ها، وام‌ها و اقساط، دارایی‌ها، طلب/بدهی‌ها و دسته‌بندی‌ها. برای دیدن فهرست، پیدا کردن شناسه یک رکورد برای ویرایش/حذف، یا جمع‌های یک بخش از این ابزار استفاده کن. هرگز شناسه نساز و از حافظه حدس نزن؛ شناسه را از همین ابزار بگیر.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "record_type": {
+        "type": "string",
+        "enum": ["accounts", "transactions", "transfers", "loans", "installments", "assets", "obligations", "categories"],
+        "description": "نوع رکوردی که باید خوانده شود."
+      },
+      "date_range": {
+        "type": "object",
+        "properties": {
+          "start": { "type": "string", "description": "تاریخ شروع؛ ISO میلادی یا شمسی یا عبارت نسبی." },
+          "end": { "type": "string", "description": "تاریخ پایان؛ ISO میلادی یا شمسی یا عبارت نسبی." }
+        },
+        "description": "بازه تاریخ برای تراکنش‌ها و انتقال‌ها. اگر نیامده باشد، ماه جاری شمسی در نظر گرفته می‌شود."
+      },
+      "transaction_type": {
+        "type": "string",
+        "enum": ["income", "expense"],
+        "description": "فیلتر نوع برای تراکنش‌ها."
+      },
+      "account": { "type": "string", "description": "نام یا شناسه حساب برای فیلتر." },
+      "category": { "type": "string", "description": "نام یا شناسه دسته‌بندی برای فیلتر." },
+      "search_query": { "type": "string", "description": "جست‌وجوی متنی در توضیح، حساب یا دسته." },
+      "loan_status": {
+        "type": "string",
+        "enum": ["active", "closed", "archived"],
+        "description": "فیلتر وضعیت وام."
+      },
+      "obligation_direction": {
+        "type": "string",
+        "enum": ["receivable", "payable"],
+        "description": "طلب (receivable) یا بدهی (payable) برای فیلتر طلب/بدهی‌ها."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "description": "حداکثر تعداد رکورد برگشتی. پیش‌فرض ۵۰."
+      }
+    },
+    "required": ["record_type"],
+    "additionalProperties": false
+  }
+}

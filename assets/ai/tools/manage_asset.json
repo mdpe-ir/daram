@@ -1,0 +1,40 @@
+{
+  "name": "manage_asset",
+  "description": "ثبت، ویرایش یا حذف دارایی کاربر (طلا، نقره، ارز خارجی یا رمزارز). برای ثبت دارایی جدید action=create با نام، نوع و مقدار؛ برای تغییر مقدار/نرخ action=update با asset_id؛ برای حذف action=delete. اگر کاربر خواست «نرخ روز بازار را بگذار»، use_market_rate را true بفرست تا برنامه نرخ زنده را از منابع بازار بگیرد. مقدار طلا/نقره به گرم و ارز/رمزارز به واحد است.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["create", "update", "delete"],
+        "description": "عملیات موردنظر."
+      },
+      "asset_id": { "type": "string", "description": "شناسه دقیق دارایی (برای update و delete)." },
+      "name": { "type": "string", "description": "نام دارایی؛ مثل «طلای پس‌انداز» یا «دلار نقدی»." },
+      "kind": {
+        "type": "string",
+        "enum": ["gold", "silver", "currency", "crypto"],
+        "description": "نوع دارایی."
+      },
+      "currency_code": {
+        "type": "string",
+        "description": "کد سه‌حرفی ارز (مثل USD) یا نماد رمزارز (مثل BTC). برای طلا/نقره خالی بگذار."
+      },
+      "quantity": {
+        "type": "number",
+        "minimum": 0,
+        "description": "مقدار دارایی: گرم برای طلا/نقره، تعداد واحد برای ارز/رمزارز."
+      },
+      "rate": { "type": "number", "minimum": 0, "description": "نرخ هر گرم/واحد به واحد amount_unit." },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد نرخ و مبلغ."
+      },
+      "rate_date": { "type": "string", "description": "تاریخ نرخ دستی." },
+      "use_market_rate": { "type": "boolean", "description": "نرخ زنده بازار گرفته شود." }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

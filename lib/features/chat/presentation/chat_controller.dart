@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/app_providers.dart';
@@ -12,6 +13,7 @@ import '../../ai/data/ai_chat_service.dart';
 import '../../ai/data/ai_log_store.dart';
 import '../../ai/data/prompt_builder.dart';
 import '../../ai/domain/ai_log.dart';
+import '../../ai/domain/settings_change.dart';
 import '../../settings/domain/app_settings.dart';
 import '../../sms/data/sms_review_repository.dart';
 import '../data/chat_repository.dart';
@@ -31,6 +33,7 @@ class ChatUiState {
     this.streaming = false,
     this.streamingText = '',
     this.searchQuery = '',
+    this.replyTo,
     this.error,
     this.configError,
   });
@@ -43,6 +46,9 @@ class ChatUiState {
   final bool streaming;
   final String streamingText;
   final String searchQuery;
+
+  /// Message the user chose to reply to, shown above the composer.
+  final ChatMessage? replyTo;
   final String? error;
   final String? configError;
 
@@ -88,11 +94,13 @@ class ChatUiState {
     bool? streaming,
     String? streamingText,
     String? searchQuery,
+    ChatMessage? replyTo,
     String? error,
     String? configError,
     bool clearError = false,
     bool clearConfigError = false,
     bool clearActiveSession = false,
+    bool clearReplyTo = false,
   }) {
     return ChatUiState(
       sessions: sessions ?? this.sessions,
@@ -105,6 +113,7 @@ class ChatUiState {
       streaming: streaming ?? this.streaming,
       streamingText: streamingText ?? this.streamingText,
       searchQuery: searchQuery ?? this.searchQuery,
+      replyTo: clearReplyTo ? null : (replyTo ?? this.replyTo),
       error: clearError ? null : (error ?? this.error),
       configError: clearConfigError ? null : (configError ?? this.configError),
     );
@@ -219,6 +228,11 @@ class ChatController extends Notifier<ChatUiState> {
   void setSearchQuery(String query) =>
       state = state.copyWith(searchQuery: query);
 
+  /// Marks [message] as the quoted message for the next turn.
+  void replyTo(ChatMessage message) => state = state.copyWith(replyTo: message);
+
+  void clearReplyTo() => state = state.copyWith(clearReplyTo: true);
+
   void dismissError() => state = state.copyWith(clearError: true);
 
   void dismissConfigError() => state = state.copyWith(clearConfigError: true);
@@ -226,6 +240,7 @@ class ChatController extends Notifier<ChatUiState> {
   Future<void> send(
     String text, {
     SmsChatFocus smsFocus = const SmsChatFocus(),
+    String? replyToMessageId,
   }) async {
     final content = text.trim();
     if (content.isEmpty || state.streaming) return;
@@ -233,6 +248,11 @@ class ChatController extends Notifier<ChatUiState> {
     if (session == null) return;
 
     final previousMessages = List<ChatMessage>.of(state.messages);
+    final quoted = replyToMessageId == null
+        ? null
+        : previousMessages.firstWhereOrNull(
+            (message) => message.id == replyToMessageId,
+          );
     try {
       final smsRows = await _smsFocusRows(smsFocus);
       final smsLabel = _smsFocusLabel(smsFocus, smsRows);
@@ -246,10 +266,13 @@ class ChatController extends Notifier<ChatUiState> {
           'smsReplyTo': ?smsFocus.replyToId,
           if (smsFocus.hasSelection)
             'smsSelection': smsFocus.selectedIds.toList(),
+          if (quoted != null) 'replyToId': quoted.id,
+          if (quoted != null) 'replyToPreview': _previewOf(quoted),
         },
       );
       state = state.copyWith(
         messages: [...previousMessages, userMessage],
+        clearReplyTo: true,
         clearError: true,
       );
 
@@ -271,6 +294,7 @@ class ChatController extends Notifier<ChatUiState> {
         sessionId: session.id,
         smsFocus: smsFocus,
         smsRows: smsRows,
+        replyTo: quoted,
       );
     } on Object {
       state = state.copyWith(error: 'ثبت پیام ممکن نشد.');
@@ -328,6 +352,7 @@ class ChatController extends Notifier<ChatUiState> {
     required String sessionId,
     SmsChatFocus smsFocus = const SmsChatFocus(),
     List<SmsSuggestionRow> smsRows = const [],
+    ChatMessage? replyTo,
   }) async {
     _buffer.clear();
     _finishHandled = false;
@@ -367,6 +392,17 @@ class ChatController extends Notifier<ChatUiState> {
           .listWithBalances();
       final categories = await ref.read(categoryRepositoryProvider).list();
       final loans = await ref.read(loanRepositoryProvider).list();
+      final assets = await ref.read(assetRepositoryProvider).list();
+      final obligations = await ref.read(obligationRepositoryProvider).list();
+      final pendingActions = (await _chat.pendingActionsForSession(sessionId))
+          .where((action) => action.isPending)
+          .toList();
+      final recentOperations = await ref
+          .read(operationRepositoryProvider)
+          .recent(limit: 5);
+      final recentTransactions = await ref
+          .read(transactionRepositoryProvider)
+          .recent(limit: 5);
       final prompt = promptBuilder.build(
         PromptContext(
           now: DateTime.now(),
@@ -374,6 +410,12 @@ class ChatController extends Notifier<ChatUiState> {
           accounts: accounts,
           categories: categories,
           loans: loans,
+          assets: assets,
+          obligations: obligations,
+          pendingActions: pendingActions,
+          recentOperations: recentOperations,
+          recentTransactions: recentTransactions,
+          replyTo: replyTo,
           tools: toolRegistry.definitions,
           toolMode: settings.aiConfig.toolMode,
         ),
@@ -456,6 +498,11 @@ class ChatController extends Notifier<ChatUiState> {
     final actions = event.actions;
     final reports = event.reports;
     final smsIds = event.smsSuggestionIds;
+
+    // Preference changes are safe and apply immediately, without a draft.
+    for (final change in event.settingsChanges) {
+      await _applySettingsChange(change);
+    }
     final content = text.isNotEmpty
         ? text
         : actions.isNotEmpty
@@ -706,6 +753,35 @@ class ChatController extends Notifier<ChatUiState> {
     } on Object {
       state = state.copyWith(loading: false, error: 'بارگذاری گفتگو ممکن نشد.');
     }
+  }
+
+  Future<void> _applySettingsChange(SettingsChange change) async {
+    final notifier = ref.read(settingsControllerProvider.notifier);
+    try {
+      if (change.themeMode != null) {
+        await notifier.setThemeMode(change.themeMode!);
+      }
+      if (change.currencyUnit != null) {
+        await notifier.setCurrency(change.currencyUnit!);
+      }
+      if (change.persianDigits != null) {
+        await notifier.setPersianDigits(change.persianDigits!);
+      }
+    } on Object {
+      // A failed preference write must not fail the assistant turn.
+    }
+  }
+
+  /// Short one-line preview of a quoted message.
+  String _previewOf(ChatMessage message) {
+    final draftIds = message.pendingActionIds;
+    if (draftIds.isNotEmpty) {
+      final text = message.content.trim();
+      return text.isEmpty ? 'پیش‌نویس مالی' : text;
+    }
+    final text = message.content.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (text.isEmpty) return 'پیام';
+    return text.length <= 160 ? text : '${text.substring(0, 160)}…';
   }
 
   Future<void> _refreshActive() async {

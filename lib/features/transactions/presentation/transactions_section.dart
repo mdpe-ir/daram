@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/app_providers.dart';
+import '../../../app/design_system/category_picker.dart';
 import '../../../app/design_system/daram_inputs.dart';
 import '../../../app/design_system/daram_widgets.dart';
 import '../../../app/theme/daram_colors.dart';
@@ -890,6 +891,12 @@ class _TransactionEditorSheetState
   late CurrencyUnit _unit;
   late String? _accountId;
   late String? _categoryId;
+
+  /// Whether the user picked a category in this session. Until they do, a new
+  /// transaction defaults to the first category of the current type (the
+  /// previous dropdown behaviour); after they pick «بدون دسته‌بندی» the field
+  /// must stay empty instead of being auto-filled again.
+  bool _categoryTouched = false;
   Rial? _parsed;
   bool _busy = false;
 
@@ -940,7 +947,7 @@ class _TransactionEditorSheetState
     if (_accountId == null && accounts.isNotEmpty) {
       _accountId = accounts.first.account.id;
     }
-    if (_categoryId == null && filtered.isNotEmpty) {
+    if (_categoryId == null && !_categoryTouched && filtered.isNotEmpty) {
       _categoryId = filtered.first.id;
     }
 
@@ -966,6 +973,7 @@ class _TransactionEditorSheetState
             onSelectionChanged: (value) => setState(() {
               _type = value.first;
               _categoryId = null;
+              _categoryTouched = false;
             }),
           ),
           const SizedBox(height: 14),
@@ -997,17 +1005,16 @@ class _TransactionEditorSheetState
             onChanged: (value) => setState(() => _accountId = value),
           ),
           const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            initialValue: _categoryId,
-            decoration: const InputDecoration(labelText: 'دسته‌بندی'),
-            items: [
-              for (final category in filtered)
-                DropdownMenuItem(
-                  value: category.id,
-                  child: Text(category.name),
-                ),
-            ],
-            onChanged: (value) => setState(() => _categoryId = value),
+          CategoryPickerField(
+            selected: filtered
+                .where((category) => category.id == _categoryId)
+                .firstOrNull,
+            categories: filtered,
+            type: _type,
+            onChanged: (category) => setState(() {
+              _categoryTouched = true;
+              _categoryId = category?.id;
+            }),
           ),
           const SizedBox(height: 14),
           JalaliDateField(

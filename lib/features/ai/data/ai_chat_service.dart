@@ -5,6 +5,7 @@ import '../../../core/money/currency.dart';
 import '../../chat/domain/chat_models.dart';
 import '../domain/ai_log.dart';
 import '../domain/ai_models.dart';
+import '../domain/settings_change.dart';
 import '../domain/tool.dart';
 import 'ai_log_store.dart';
 import 'ai_provider_registry.dart';
@@ -27,6 +28,7 @@ class ChatRunCompleted extends ChatRunEvent {
     required this.actions,
     required this.reports,
     this.smsSuggestionIds = const <String>[],
+    this.settingsChanges = const <SettingsChange>[],
   });
 
   final String text;
@@ -35,6 +37,9 @@ class ChatRunCompleted extends ChatRunEvent {
 
   /// SMS suggestions shown during this turn, rendered as cards in chat.
   final List<String> smsSuggestionIds;
+
+  /// Non-financial preference changes requested in this turn.
+  final List<SettingsChange> settingsChanges;
 }
 
 class ChatRunFailed extends ChatRunEvent {
@@ -63,8 +68,8 @@ class AIChatService {
   final ToolExecutor _executor;
   final AILogStore _logs;
 
-  static const int _maxToolRounds = 3;
-  static const int _maxHistoryMessages = 24;
+  static const int _maxToolRounds = 4;
+  static const int _maxHistoryMessages = 40;
 
   Stream<ChatRunEvent> run({
     required AIConfig config,
@@ -134,6 +139,7 @@ class AIChatService {
     final actions = <PendingAction>[];
     final reports = <Map<String, Object?>>[];
     final smsIds = <String>{};
+    final settingsChanges = <SettingsChange>[];
     final previousCounts = <String, int>{};
     final runWatch = Stopwatch()..start();
 
@@ -186,6 +192,7 @@ class AIChatService {
             actions: actions,
             reports: reports,
             smsSuggestionIds: smsIds.toList(),
+            settingsChanges: settingsChanges,
           );
         }
         return;
@@ -221,6 +228,7 @@ class AIChatService {
           actions: actions,
           reports: reports,
           smsSuggestionIds: smsIds.toList(),
+          settingsChanges: settingsChanges,
         );
         return;
       }
@@ -255,6 +263,9 @@ class AIChatService {
           if (occurrence > (previousCounts[key] ?? 0)) actions.add(action);
         }
         if (execution.report != null) reports.add(execution.report!);
+        if (execution.settingsChange != null) {
+          settingsChanges.add(execution.settingsChange!);
+        }
         smsIds.addAll(execution.smsSuggestionIds);
         resultMessages.add(
           AIMessage.toolResult(
@@ -296,6 +307,7 @@ class AIChatService {
       actions: actions,
       reports: reports,
       smsSuggestionIds: smsIds.toList(),
+      settingsChanges: settingsChanges,
     );
   }
 
@@ -375,6 +387,7 @@ class AIChatService {
     final actions = <PendingAction>[];
     final reports = <Map<String, Object?>>[];
     final smsIds = <String>{};
+    final settingsChanges = <SettingsChange>[];
     final calls = <ToolCall>[];
 
     if (rawActions is List) {
@@ -417,6 +430,9 @@ class AIChatService {
         actions.add(execution.pendingAction!);
       }
       if (execution.report != null) reports.add(execution.report!);
+      if (execution.settingsChange != null) {
+        settingsChanges.add(execution.settingsChange!);
+      }
       smsIds.addAll(execution.smsSuggestionIds);
     }
 
@@ -433,6 +449,7 @@ class AIChatService {
       actions: actions,
       reports: reports,
       smsSuggestionIds: smsIds.toList(),
+      settingsChanges: settingsChanges,
     );
   }
 
@@ -478,11 +495,36 @@ class AIChatService {
       for (final message in recent)
         if (message.content.trim().isNotEmpty)
           if (message.role == ChatRole.user)
-            AIMessage.user(message.content)
+            AIMessage.user(_withQuote(message))
           else if (message.role == ChatRole.assistant &&
               message.type != ChatMessageType.error)
             AIMessage.assistant(message.content),
     ];
+  }
+
+  /// Keeps the quoted message (or SMS card the user replied to) visible to the
+  /// model in later turns, so follow-ups do not lose the reference.
+  String _withQuote(ChatMessage message) {
+    final parts = <String>[];
+    final replyPreview = message.metadata['replyToPreview'];
+    if (replyPreview is String && replyPreview.trim().isNotEmpty) {
+      parts.add('«پاسخ به پیام: ${replyPreview.trim()}»');
+    }
+    final smsLabel = message.metadata['smsFocusLabel'];
+    final smsReply = message.metadata['smsReplyTo'];
+    if (smsLabel is String && smsLabel.trim().isNotEmpty) {
+      parts.add(
+        '«${smsReply != null ? 'پاسخ به کارت پیامکی' : 'دستور برای پیشنهادهای پیامکی'}: '
+        '${smsLabel.trim()}»',
+      );
+    } else {
+      final selection = message.metadata['smsSelection'];
+      if (selection is List && selection.isNotEmpty) {
+        parts.add('«دستور برای ${selection.length} پیشنهاد پیامکی انتخاب‌شده»');
+      }
+    }
+    if (parts.isEmpty) return message.content;
+    return '${parts.join(' ')}\n${message.content}';
   }
 
   Map<String, Object?>? _parseEnvelope(String raw) {

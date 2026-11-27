@@ -45,15 +45,18 @@ The model never writes to the database. It proposes a **structured financial dra
 
 ## 2. Phase 1 scope (what works today)
 
-- **Chat-first experience** — multiple conversations, history, search, rename, delete, Markdown, RTL, streaming, typing indicator, stop/retry/regenerate, copy.
+- **Chat-first experience** — multiple conversations, history, search, rename, delete, Markdown, RTL, streaming, typing indicator, stop/retry/regenerate, copy, long-press reply with quoted context.
+- **Conversation memory** — every turn is re-grounded with the open drafts, recent operations, newest transactions, assets, obligations and (when replying) the quoted message, so follow-ups like «همون رو عوض کن» do not lose context or re-ask known details.
 - **AI provider of your choice** — OpenAI-compatible endpoints, native Anthropic, native Gemini, strict JSON fallback for models without tool calling. API key stored in `flutter_secure_storage`.
-- **Structured tools** — `add_account`, `add_transaction`, `add_transfer`, `add_loan`, `mark_installment_paid`, `query_transactions`, `generate_report`, each with a JSON Schema asset.
-- **Financial safety workflow** — pending drafts, per-field editing, individual or batch confirmation, idempotent operation ids, undo.
+- **Structured tools** — 23 JSON-Schema tools: creating records (`add_account`, `add_transaction`, `add_transfer`, `add_loan`, `mark_installment_paid`), reading (`query_transactions`, `query_records`, `get_financial_overview`, `generate_report`), full editing (`manage_account`, `manage_transaction`, `manage_transfer`, `manage_loan`, `manage_asset`, `manage_obligation`), draft control (`update_pending_draft`, `cancel_pending_draft`), categories, SMS review and display settings (`update_settings`).
+- **Financial safety workflow** — pending drafts, per-field editing, individual or batch confirmation, idempotent operation ids, undo; edit/archive/delete drafts always require explicit approval.
+- **Financial overview and roadmap** — the assistant computes net worth, cash flow, savings rate, emergency-fund coverage, debt ratio, a 0–100 health score and a prioritized roadmap from the local database, and renders them as a rich chat card.
 - **Persian understanding** — Persian/Arabic/English digits, colloquial amounts («۲۵۰ هزار», «یک و نیم میلیون», «سه میلیون»), Jalali and relative dates, transfer detection, multi-activity messages, loans and installments.
 - **Local ledger** — integer Rial amounts, a single `ledger_entries` table as the source of truth for balances, atomic transfers, deterministic loan schedules.
 - **Dashboard** — total balance, account balances, income/expense/net, monthly chart, category donut, recent activity, upcoming installments.
-- **Records** — accounts (archive/edit), transactions (filter, search, create, edit, delete), transfers, loans with installment schedule and payments.
-- **Settings** — light/dark/system themes, Toman/Rial display, Persian digits, categories CRUD, CSV/PDF exports, full JSON backup/restore, and the live version name/build code (via `package_info_plus`) in About ([screenshot](docs/screenshots/about-version-light.png)).
+- **Records** — accounts (archive/edit), transactions (filter, search, create, edit, delete), transfers, loans with installment schedule and payments; the transaction editor uses the same searchable category sheet as the chat drafts.
+- **Market prices** — DARAM's own multi-source fiat/gold/crypto/silver price layer (see [section 8](#8-market-data-darams-own-price-system)), used by the asset editor and by the assistant when valuing the portfolio.
+- **Settings** — light/dark/system themes, Toman/Rial display, Persian digits, categories CRUD, CSV/PDF exports, full JSON backup/restore, and the live version name/build code (via `package_info_plus`) in About ([screenshot](docs/screenshots/about-version-light.png)). Display settings can also be changed from chat.
 - **Searchable Iranian bank catalog** — 40 banks/credit institutions and 26 neobanks, each mapped to a real bundled mark; digital banks without a standalone mark use their parent bank's logo, and a custom-bank fallback covers anything else.
 - **No network dependency for core use** — the app opens, reads and writes locally without an AI connection.
 
@@ -173,6 +176,9 @@ lib/
                                 confirmation/undo services
     accounts/ transactions/     data + domain + presentation
     loans/ dashboard/ settings/ categories/
+    market/                     DARAM's own price layer: Bonbast/Chand/Nobitex/
+                                Tetherland parsers, derived silver spot, snapshot
+                                cache with per-source health
 ```
 
 ### The write path (most important invariant)
@@ -219,7 +225,7 @@ Transfers write both legs and (optionally) a separate expense record for the fee
 - The AI receives today's Gregorian date, Jalali date, weekday, time and offset on every request.
 - Persian relative dates are parsed deterministically (`PersianDateParser`) and missing years are flagged on the draft, not silently guessed.
 
-## 7. Database schema (v1)
+## 7. Database schema (v6)
 
 | Table | Purpose | Key columns |
 |---|---|---|
@@ -235,20 +241,38 @@ Transfers write both legs and (optionally) a separate expense record for the fee
 | `pending_actions` | financial drafts | `action_type`, `payload_json`, `status`, `operation_id` (unique) |
 | `financial_operations` | audit + undo journal | `kind`, `entity_id`, `payload_json`, `status`, `undone_at` |
 
-Foreign keys are enabled (`PRAGMA foreign_keys = ON`), indexes cover dates, accounts, categories, sessions and ledger lookups. `schemaVersion` is 1; future changes belong in a numbered migration.
+Foreign keys are enabled (`PRAGMA foreign_keys = ON`), indexes cover dates, accounts, categories, sessions and ledger lookups. `schemaVersion` is 6; every schema change ships with a numbered migration in `AppDatabase.migration`.
 
-## 8. AI integration
+## 8. Market data (DARAM's own price system)
+
+Live fiat, gold, gold-coin, silver and crypto prices come from DARAM's own multi-source layer (`lib/features/market/`), not from a third-party rate API.
+
+| Source | Feed | What it provides |
+|---|---|---|
+| [Bonbast](https://bonbast.com/) | HTML page + same-session `/json` POST | 28 fiat currencies (buy/sell), five gold coins, 18-karat gram and mithqal gold |
+| [Chand](https://hansha.online/latest) | JSON | fiat, crypto and gold fallback |
+| [Nobitex](https://api.nobitex.ir) | JSON | crypto in Rial |
+| [Tetherland](https://tetherland.com) | JSON | crypto in Toman |
+| [Yahoo Finance](https://finance.yahoo.com) | COMEX `SI=F` chart | silver spot (USD/oz), converted with the USD/Toman rate |
+
+- Sources are fetched concurrently, each with its own timeout; a failing source is reported in the snapshot instead of breaking the fetch.
+- Merge priority: Bonbast then Chand for fiat and gold; Tetherland → Nobitex → Chand → Bonbast (derived BTC) for crypto; silver is derived after the merge from COMEX spot and the USD/Toman rate.
+- Snapshots are cached for five minutes; concurrent callers share one in-flight fetch, and a stale snapshot is served when every source fails.
+- The asset editor fetches a live rate with one tap and falls back to a manual rate for currencies no source quotes.
+- No API key, no account and no rate-API quota: the app talks to the public feeds directly. Bonbast's JSON endpoint is reached without a headless browser by reusing the per-page token and session cookie.
+
+## 9. AI integration
 
 - **One abstraction:** `AIProvider.streamChat(...)` emits text deltas, assembled tool calls, done and Persian errors. Provider code is isolated from chat and finance.
 - **OpenAI-compatible:** `/v1/chat/completions`, SSE, native `tools`, custom base URL/model, configurable timeout.
 - **Anthropic:** native Messages API, `tool_use`/`tool_result` blocks, SSE.
 - **Gemini:** `streamGenerateContent?alt=sse`, function declarations, OpenAPI-style schema conversion.
 - **JSON fallback:** one valid JSON envelope per response, parsed defensively, one corrective retry, never executed when malformed.
-- **Tool loop:** up to three model↔tool rounds per user turn, so the assistant can ask a question after a validation error.
-- **Prompts:** `assets/ai/system_prompt_fa.md` + five few-shot files + seven tool schemas. Dynamic context is injected per request.
+- **Tool loop:** up to four model↔tool rounds per user turn, so the assistant can ask a question after a validation error or chain a query into a draft.
+- **Prompts:** `assets/ai/system_prompt_fa.md` + five few-shot files + 23 tool schemas. Dynamic context (accounts, categories, loans, assets, obligations, open drafts, recent operations/transactions, quoted reply) is injected per request.
 - **Nothing is fabricated:** if a read tool is needed, it is executed against the local DB; the model only interprets the returned numbers.
 
-## 9. Design system
+## 10. Design system
 
 - **DARAM mark:** a geometric D with a mint node on its shoulder; works from 24 px to launcher size. Painted in Dart; the source art and adaptive layers are generated by `tool/generate_icon.py`, and all platform launcher icons are generated by `flutter_launcher_icons`.
 - **Type:** Vazirmatn (Light→ExtraBold), bundled locally, tabular figures for amounts.
@@ -258,7 +282,7 @@ Foreign keys are enabled (`PRAGMA foreign_keys = ON`), indexes cover dates, acco
 - **Accessibility:** RTL everywhere, semantic labels on navigation, 48 px touch targets, WCAG-conscious contrast, text scaling-friendly layout.
 - **Motion:** `flutter_animate` for splash/onboarding/chat entry, animated charts, a custom typing indicator, press scale feedback. No motion on financial data itself.
 
-## 10. Assets and licenses
+## 11. Assets and licenses
 
 | Asset | Source | License |
 |---|---|---|
@@ -275,7 +299,7 @@ Foreign keys are enabled (`PRAGMA foreign_keys = ON`), indexes cover dates, acco
 
 Fifteen digital banks have a standalone mark (seven official marks plus eight public brand marks); the other 11 use their parent bank's logo, shown with the parent in the picker. There are no generated letter placeholders. Logos are used for identification only. See [`docs/ASSETS.md`](docs/ASSETS.md) and [`assets/banks/ATTRIBUTION.md`](assets/banks/ATTRIBUTION.md).
 
-## 11. Testing
+## 12. Testing
 
 ```bash
 flutter test                       # all unit, widget and integration tests
@@ -295,9 +319,9 @@ Coverage highlights:
 - Widget: splash/onboarding/chat, draft confirmation writes to Drift, dashboard/records/settings rendering, dark mode, RTL.
 - Integration: three activities in one message → three cards → **تأیید همه** → three records with correct balances.
 
-**No real API key is required** for any test. The current suite is **90 tests** across the unit, widget and integration suites, including the 66-entry/55-mark bank catalog and the searchable bank picker.
+**No real API key is required** for any test, and the market tests never touch the network (captured fixtures + injected fake providers). The current suite is **228 tests** across the unit, widget and integration suites, including the 66-entry/55-mark bank catalog, the searchable bank picker, the multi-source market layer and the full AI tool/draft/confirmation flow.
 
-## 12. Builds
+## 13. Builds
 
 ### Release scripts (Android signing, web and Linux)
 
@@ -358,7 +382,7 @@ python3 -m http.server 8080 --directory build/web
   localhost, and responses are buffered rather than token-by-token. Details and
   workarounds: [`docs/PLATFORMS.md`](docs/PLATFORMS.md).
 
-## 13. Package selection (summary)
+## 14. Package selection (summary)
 
 | Area | Choice | Why |
 |---|---|---|
@@ -376,7 +400,7 @@ python3 -m http.server 8080 --directory build/web
 
 `langchain_dart` was evaluated but not used: DARAM needs precise control over SSE framing, provider-specific tool blocks, cancellation and custom endpoints, and the app already has a thin, tested abstraction. Avoided: Firebase, Google Fonts runtime, runtime image URLs, heavy chat UI kits. Full rationale and versions are in [`docs/PACKAGES.md`](docs/PACKAGES.md).
 
-## 14. Assumptions and known limitations
+## 15. Assumptions and known limitations
 
 - **iOS is configured but was not built here** (no macOS/Xcode in the environment). Android, Linux and web are verified.
 - **Web-specific limits:** browser AI calls are subject to provider CORS; token streaming is buffered; the API key needs HTTPS or localhost; browser storage is cleared with site data. Use the Android/Linux build when a provider blocks CORS.
@@ -384,16 +408,17 @@ python3 -m http.server 8080 --directory build/web
 - **SMS review is Android-only.** In each account, open **انتخاب سرشماره‌ها** and select its senders from the inbox. New messages are checked while the app is running and caught up on reopen. Initial import can include the previous 30 days. Use **بازبینی پیامک‌ها** in chat or Settings, or ask the assistant in the chat itself: pending suggestions appear as one compact panel. Tap **پاسخ** on a row to write an instruction about that suggestion, or tap **انتخاب** and pick several rows for one group command. The assistant receives the exact suggestion ids and can confirm, edit or dismiss them; the manual confirm/edit/reject actions remain available from each row's details. Editing a draft is allowed while reviewing, but confirmation and rejection still require the suggestion to have been shown in that conversation. Edited drafts are marked and survive later inbox rescans. The optional AI switch learns unfamiliar templates with your configured provider.
 - **AI quality depends on the chosen model.** Tool-calling models are strongly preferred; JSON mode is a fallback, not an equal experience.
 - **Bank catalog:** names follow public Iranian banking/neobank lists and may lag regulatory mergers. Users can always add a custom bank or neobank. Fifteen digital banks have a bundled standalone mark; the remaining 11 reuse their parent bank's logo. All marks are trademarks used only for identification.
-- **Transfers cannot be edited in place.** They can be deleted (with confirmation); fee rows are protected from direct edits.
-- **Undo covers AI-confirmed operations** (transaction, transfer, loan, installment payment, empty account). It refuses when dependent records exist (e.g. an account with transactions). Manual edits/deletes are not journaled.
+- **Transfers** can be edited or deleted from chat with confirmation (the ledger is rewritten atomically); the records screen currently supports deleting them, and fee rows stay protected from direct edits.
+- **Undo covers AI-confirmed creation operations** (transaction, transfer, loan, installment payment, empty account). It refuses when dependent records exist (e.g. an account with transactions). AI edits, archives and deletes are journaled for audit but are not auto-reversible.
+- **Market prices need a network connection.** Bonbast (cookie + `X-Requested-With` header) and Chand publish no CORS headers, so they only work in the Android/Linux builds; the web build can still use CORS-enabled sources if any. A failing source is reported, not fatal, and the asset editor always accepts a manual rate. Silver uses the COMEX front-month future as a spot proxy and is converted with the USD/Toman rate; it is not an Iranian physical-silver quote.
 - **Loan model:** equal installments; remainder on the last; total interest split evenly; no amortization schedule or interest-rate calculation. Interest is tracked on the loan, not auto-booked as an expense.
 - **Date ambiguity:** a missing year is resolved to the nearest past occurrence and flagged on the draft; a missing date is never invented.
 - **Local backup is plaintext JSON** (by design, so it is portable). Users are warned to store it safely. SQLCipher/encrypted backup is Phase 2.
 - **PDF Persian shaping** uses `arabic_reshaper` + `bidi`, draws shaped text in visual order, and lays the page/table out RTL with Persian digits. Free-text descriptions that mix Latin and Persian may still need a quick review.
-- **Chat context** is trimmed to the last 24 messages, and read tools are limited (e.g. 100 transactions per call) to keep requests small.
+- **Chat context** is trimmed to the last 40 messages, and read tools are limited (e.g. 100 records per call) to keep requests small. Pending drafts, recent operations and recent transactions are always re-injected.
 - **Schema migrations** preserve existing chats and financial records when adding the SMS review tables.
 
-## 15. Phase 2 roadmap
+## 16. Phase 2 roadmap
 
 1. **Encryption at rest** (SQLCipher) and encrypted backups.
 2. **Voice input** with on-device speech, then the same draft pipeline.
@@ -403,7 +428,7 @@ python3 -m http.server 8080 --directory build/web
 6. **Smarter reports**: cash-flow forecast, category trends, subscription detection.
 7. **Widgets / share sheet / shortcuts**, plus a full iOS release pipeline and Windows/macOS shells.
 
-## 16. Project structure (top level)
+## 17. Project structure (top level)
 
 ```
 android/ ios/ linux/ web/  native shells and the web/PWA shell
@@ -421,7 +446,7 @@ web/sqlite3.wasm           SQLite WASM runtime (3.9.0)
 web/drift_worker.js        compiled from tool/drift_worker.dart
 ```
 
-## 17. Environment note
+## 18. Environment note
 
 This build was made on a Linux machine whose Flutter SDK lives on a read-only mount. The Linux desktop engine artifact was downloaded once into the SDK cache with a wider one-off approval; everything else uses the wrappers below. Release tasks also update engine stamps in that cache, so they need write access on this setup; the release scripts use the direct-Gradle path automatically. To make commands reproducible without modifying the SDK, the repository contains:
 

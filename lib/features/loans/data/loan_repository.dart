@@ -307,6 +307,75 @@ class LoanRepository {
         .write(const LoansCompanion(status: Value(LoanStatus.archived)));
   }
 
+  /// Edits the descriptive fields of a loan.
+  ///
+  /// The principal, schedule and payments are immutable here: changing them
+  /// would silently rewrite already-paid installments, so the assistant
+  /// deletes and re-creates a loan instead.
+  Future<void> update({
+    required String loanId,
+    String? title,
+    String? description,
+    bool clearDescription = false,
+    LoanStatus? status,
+  }) async {
+    final row = await (_db.select(
+      _db.loans,
+    )..where((table) => table.id.equals(loanId))).getSingleOrNull();
+    if (row == null) throw const NotFoundException('وام پیدا نشد.');
+    final trimmedTitle = title?.trim();
+    if (trimmedTitle != null && trimmedTitle.isEmpty) {
+      throw const ValidationException('عنوان وام را وارد کنید.');
+    }
+    await (_db.update(
+      _db.loans,
+    )..where((table) => table.id.equals(loanId))).write(
+      LoansCompanion(
+        title: trimmedTitle == null
+            ? const Value.absent()
+            : Value(trimmedTitle),
+        description: clearDescription
+            ? const Value(null)
+            : description == null
+            ? const Value.absent()
+            : Value(description.trim()),
+        status: status == null ? const Value.absent() : Value(status),
+      ),
+    );
+  }
+
+  /// Deletes a loan, its schedule and every ledger movement it produced.
+  ///
+  /// Removing the disbursement and installment-payment ledger rows restores
+  /// the account balances to what they would be without the loan.
+  Future<void> delete(String loanId) async {
+    final row = await (_db.select(
+      _db.loans,
+    )..where((table) => table.id.equals(loanId))).getSingleOrNull();
+    if (row == null) throw const NotFoundException('وام پیدا نشد.');
+    final installments = await (_db.select(
+      _db.installments,
+    )..where((table) => table.loanId.equals(loanId))).get();
+    final installmentIds = {for (final item in installments) item.id};
+
+    await _db.transaction(() async {
+      await (_db.delete(_db.ledgerEntries)..where(
+            (table) =>
+                (table.sourceType.equalsValue(LedgerSource.loanDisbursement) &
+                    table.sourceId.equals(loanId)) |
+                (table.sourceType.equalsValue(LedgerSource.installmentPayment) &
+                    table.sourceId.isIn(installmentIds)),
+          ))
+          .go();
+      await (_db.delete(
+        _db.installments,
+      )..where((table) => table.loanId.equals(loanId))).go();
+      await (_db.delete(
+        _db.loans,
+      )..where((table) => table.id.equals(loanId))).go();
+    });
+  }
+
   /// Installments due soon across all active loans, for the dashboard.
   Future<List<Installment>> upcoming({int limit = 5, DateTime? from}) async {
     final start = from ?? DateTime.now();

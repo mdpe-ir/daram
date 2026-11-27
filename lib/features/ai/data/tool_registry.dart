@@ -30,11 +30,22 @@ class ToolRegistry {
     'assets/ai/tools/add_loan.json',
     'assets/ai/tools/mark_installment_paid.json',
     'assets/ai/tools/query_transactions.json',
+    'assets/ai/tools/query_records.json',
+    'assets/ai/tools/get_financial_overview.json',
     'assets/ai/tools/generate_report.json',
     'assets/ai/tools/review_sms_suggestions.json',
     'assets/ai/tools/confirm_sms_suggestion.json',
     'assets/ai/tools/edit_sms_suggestion.json',
     'assets/ai/tools/dismiss_sms_suggestion.json',
+    'assets/ai/tools/update_pending_draft.json',
+    'assets/ai/tools/cancel_pending_draft.json',
+    'assets/ai/tools/manage_account.json',
+    'assets/ai/tools/manage_transaction.json',
+    'assets/ai/tools/manage_transfer.json',
+    'assets/ai/tools/manage_loan.json',
+    'assets/ai/tools/manage_asset.json',
+    'assets/ai/tools/manage_obligation.json',
+    'assets/ai/tools/update_settings.json',
   ];
 
   List<ToolDefinition> get definitions => _definitions;

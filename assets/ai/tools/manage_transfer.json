@@ -1,0 +1,35 @@
+{
+  "name": "manage_transfer",
+  "description": "ویرایش یا حذف یک انتقال بین حساب‌ها. اگر شناسه انتقال را داری در transfer_id بگذار؛ وگرنه با match_amount و/یا match_date آن را پیدا کن (باید دقیقاً یکی پیدا شود). برای ویرایش فقط فیلدهای تغییرکرده را بفرست. انتقال نه درآمد است نه هزینه؛ با ویرایش، موجودی دو حساب اصلاح می‌شود.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["update", "delete"],
+        "description": "ویرایش یا حذف."
+      },
+      "transfer_id": { "type": "string", "description": "شناسه دقیق انتقال." },
+      "match_amount": { "type": "number", "minimum": 0, "description": "مبلغ انتقال برای پیدا کردن آن." },
+      "match_amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ جست‌وجو."
+      },
+      "match_date": { "type": "string", "description": "تاریخ انتقال برای پیدا کردن آن." },
+      "source_account": { "type": "string", "description": "حساب مبدأ جدید؛ نام یا شناسه." },
+      "destination_account": { "type": "string", "description": "حساب مقصد جدید؛ نام یا شناسه." },
+      "amount": { "type": "number", "minimum": 0, "description": "مبلغ جدید انتقال." },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ جدید."
+      },
+      "fee_amount": { "type": "number", "minimum": 0, "description": "کارمزد جدید." },
+      "date": { "type": "string", "description": "تاریخ جدید انتقال." },
+      "description": { "type": "string", "description": "توضیح جدید." }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

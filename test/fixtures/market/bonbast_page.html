@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bonbast | Exchange Rates</title>
+</head>
+<body>
+  <!-- Captured from https://bonbast.com/ on 2026-11-27 with curl; the inline
+       script below is the authentic rate-token block, trimmed to the snippet
+       the provider needs (Bonbast embeds a fresh token on every page load). -->
+  <div id="usd1">293,200</div>
+  <div id="gol18">26,028,440</div>
+<script type="text/javascript">
+  function addCommas(nStr)
+  {
+      nStr += '';
+      x = nStr.split('.');
+      x1 = x[0];
+      x2 = x.length > 1 ? '.' + x[1] : '';
+      var rgx = /(\d+)(\d{3})/;
+      while (rgx.test(x1)) {
+          x1 = x1.replace(rgx, '$1' + ',' + '$2');
+      }
+      return x1 + x2;
+  }
+var is_date = ['last_modified', 'year', 'month', 'day', 'hour', 'minute', 'second', 'weekday'];
+var f_values = ['bitcoin', 'ounce', 'mithqal', 'gol18', 'azadi1', 'azadi12', 'emami1', 'emami12',
+                'azadi1_2', 'azadi1_22', 'azadi1_4', 'azadi1_42', 'azadi1g', 'azadi1g2'];
+function get_data(){
+$.post('/json', {param: "e4e0ead08181f73f4cd5fce666a4cc3e,PGIMQ,2026-11-27-08-51-13"}, function(json) {
+    $.each(json,function(key, value){
+        if (key == 'reset') {
+          location.reload();
+        }
+        if ($.inArray(key, is_date) == -1) {
+            var new_value = value;
+            var old = $('#' + key ).html();
+            if (old && old.indexOf(',') != -1) {
+            	old = old.replace(/,/g, '');
+            }
+			if ($.inArray(key, f_values) != -1) {
+				new_value = addCommas(value);
+			}
+	        if (value != old) {
+				var cls = 'same_val';
+                $('#' + key ).text( new_value );
+                $('#' + key + '_top').text( addCommas(value) );
+				if (old) {
+					if ( parseFloat(value) > parseFloat(old) ) {
+						cls = 'up_val';
+					}
+					else {
+						cls = 'down_val';
+					}
+				}
+				$('#' + key ).attr('class', cls);
+				$('#' + key + '_top').attr('class', cls);
+            }
+        }
+        else {
+            $('#' + key ).text( value );
+        }
+    });
+	convert(json['usd1']);
+},'json');
+setTimeout(get_data,30000);
+}
+get_data();
+</script>
+</body>
+</html>

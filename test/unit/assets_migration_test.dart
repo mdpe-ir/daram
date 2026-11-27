@@ -5,7 +5,8 @@ import 'package:daram/features/assets/domain/asset_quantity.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _insert = 'INSERT INTO asset_holdings '
+const _insert =
+    'INSERT INTO asset_holdings '
     '(id, name, kind, currency_code, quantity_micros, rate_rial, rate_date, '
     'is_market_rate, created_at) VALUES ';
 
@@ -20,13 +21,14 @@ void main() {
     final probe = AppDatabase(NativeDatabase(file));
     final String createV6;
     try {
-      createV6 = (await probe
-              .customSelect(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' "
-                "AND name = 'asset_holdings'",
-              )
-              .getSingle())
-          .read<String>('sql');
+      createV6 =
+          (await probe
+                  .customSelect(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' "
+                    "AND name = 'asset_holdings'",
+                  )
+                  .getSingle())
+              .read<String>('sql');
     } finally {
       await probe.close();
     }

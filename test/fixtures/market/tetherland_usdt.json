@@ -1,0 +1,13 @@
+{
+  "_note": "Hand-crafted from FC_Scraper internal/providers/tetherland.go (usdtResponse); the domain does not resolve from the capture machine.",
+  "data": {
+    "currencies": {
+      "USDT": {
+        "price": 293050,
+        "diff24d": "0.12",
+        "last24hMax": 293500,
+        "last24hMin": 292000
+      }
+    }
+  }
+}

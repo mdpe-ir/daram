@@ -25,8 +25,9 @@ class CryptoAsset {
   /// Highlighted as a commonly held coin in the picker.
   final bool popular;
 
-  /// True when the bundled rate source (the Navasan snapshot) publishes a
-  /// quote for this symbol, so «دریافت نرخ» is offered. Bitcoin only today.
+  /// True when DARAM's market sources publish a quote for this symbol, so
+  /// «دریافت نرخ» is offered. Quotes come from Nobitex/Tetherland (and Chand
+  /// for most coins).
   final bool hasQuote;
 
   /// Bundled circular icon, or `null` for symbols outside the catalog.
@@ -57,16 +58,36 @@ const List<CryptoAsset> cryptoAssets = [
     nameFa: 'اتریوم',
     nameEn: 'Ethereum',
     popular: true,
+    hasQuote: true,
   ),
-  CryptoAsset(symbol: 'USDT', nameFa: 'تتر', nameEn: 'Tether', popular: true),
+  CryptoAsset(
+    symbol: 'USDT',
+    nameFa: 'تتر',
+    nameEn: 'Tether',
+    popular: true,
+    hasQuote: true,
+  ),
   CryptoAsset(
     symbol: 'BNB',
     nameFa: 'بایننس کوین',
     nameEn: 'BNB',
     popular: true,
+    hasQuote: true,
   ),
-  CryptoAsset(symbol: 'SOL', nameFa: 'سولانا', nameEn: 'Solana', popular: true),
-  CryptoAsset(symbol: 'XRP', nameFa: 'ریپل', nameEn: 'XRP', popular: true),
+  CryptoAsset(
+    symbol: 'SOL',
+    nameFa: 'سولانا',
+    nameEn: 'Solana',
+    popular: true,
+    hasQuote: true,
+  ),
+  CryptoAsset(
+    symbol: 'XRP',
+    nameFa: 'ریپل',
+    nameEn: 'XRP',
+    popular: true,
+    hasQuote: true,
+  ),
   CryptoAsset(
     symbol: 'ADA',
     nameFa: 'کاردانو',
@@ -78,8 +99,21 @@ const List<CryptoAsset> cryptoAssets = [
     nameFa: 'دوج‌کوین',
     nameEn: 'Dogecoin',
     popular: true,
+    hasQuote: true,
   ),
-  CryptoAsset(symbol: 'TRX', nameFa: 'ترون', nameEn: 'TRON', popular: true),
+  CryptoAsset(
+    symbol: 'TRX',
+    nameFa: 'ترون',
+    nameEn: 'TRON',
+    popular: true,
+    hasQuote: true,
+  ),
+  CryptoAsset(
+    symbol: 'TON',
+    nameFa: 'تون‌کوین',
+    nameEn: 'Toncoin',
+    hasQuote: true,
+  ),
   CryptoAsset(
     symbol: 'LINK',
     nameFa: 'چین‌لینک',
@@ -98,8 +132,18 @@ const List<CryptoAsset> cryptoAssets = [
     nameEn: 'Polkadot',
     popular: true,
   ),
-  CryptoAsset(symbol: 'LTC', nameFa: 'لایت‌کوین', nameEn: 'Litecoin'),
-  CryptoAsset(symbol: 'BCH', nameFa: 'بیت‌کوین کش', nameEn: 'Bitcoin Cash'),
+  CryptoAsset(
+    symbol: 'LTC',
+    nameFa: 'لایت‌کوین',
+    nameEn: 'Litecoin',
+    hasQuote: true,
+  ),
+  CryptoAsset(
+    symbol: 'BCH',
+    nameFa: 'بیت‌کوین کش',
+    nameEn: 'Bitcoin Cash',
+    hasQuote: true,
+  ),
   CryptoAsset(symbol: 'XMR', nameFa: 'مونرو', nameEn: 'Monero'),
   CryptoAsset(symbol: 'ATOM', nameFa: 'کوزموس', nameEn: 'Cosmos'),
   CryptoAsset(symbol: 'UNI', nameFa: 'یونی‌سواپ', nameEn: 'Uniswap'),

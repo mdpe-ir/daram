@@ -142,6 +142,7 @@ final class PendingAction {
     DateTime? resolvedAt,
     String? messageId,
     String? sessionId,
+    bool clearError = false,
   }) => PendingAction(
     id: id,
     sessionId: sessionId ?? this.sessionId,
@@ -150,7 +151,7 @@ final class PendingAction {
     payload: payload ?? this.payload,
     status: status ?? this.status,
     operationId: operationId,
-    errorMessage: errorMessage ?? this.errorMessage,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     createdAt: createdAt,
     resolvedAt: resolvedAt ?? this.resolvedAt,
   );

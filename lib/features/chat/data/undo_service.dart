@@ -47,6 +47,20 @@ class UndoService {
       case FinancialOperationKind.updateTransaction ||
           FinancialOperationKind.deleteTransaction ||
           FinancialOperationKind.updateAccount ||
+          FinancialOperationKind.archiveAccount ||
+          FinancialOperationKind.unarchiveAccount ||
+          FinancialOperationKind.updateTransfer ||
+          FinancialOperationKind.deleteTransfer ||
+          FinancialOperationKind.updateLoan ||
+          FinancialOperationKind.archiveLoan ||
+          FinancialOperationKind.deleteLoan ||
+          FinancialOperationKind.addAsset ||
+          FinancialOperationKind.updateAsset ||
+          FinancialOperationKind.deleteAsset ||
+          FinancialOperationKind.addObligation ||
+          FinancialOperationKind.updateObligation ||
+          FinancialOperationKind.deleteObligation ||
+          FinancialOperationKind.obligationPayment ||
           FinancialOperationKind.addCategory:
         throw const ValidationException(
           'این تغییر از مسیر گفتگو انجام نشده و برگشت خودکار ندارد.',

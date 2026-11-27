@@ -1,0 +1,35 @@
+{
+  "name": "manage_transaction",
+  "description": "ویرایش یا حذف یک تراکنش ثبت‌شده. اگر شناسه تراکنش را داری در transaction_id بگذار؛ وگرنه با match_description و/یا match_date تراکنش را پیدا کن (باید دقیقاً یکی پیدا شود). برای ویرایش فقط فیلدهایی را بفرست که کاربر تغییر داده است. برای حذف action=delete. تغییرات پس از تأیید کاربر اعمال می‌شوند.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["update", "delete"],
+        "description": "ویرایش یا حذف."
+      },
+      "transaction_id": { "type": "string", "description": "شناسه دقیق تراکنش." },
+      "match_description": { "type": "string", "description": "بخشی از توضیح تراکنش برای پیدا کردن آن." },
+      "match_date": { "type": "string", "description": "تاریخ تراکنش برای پیدا کردن آن." },
+      "type": {
+        "type": "string",
+        "enum": ["income", "expense"],
+        "description": "نوع جدید تراکنش."
+      },
+      "amount": { "type": "number", "minimum": 0, "description": "مبلغ جدید؛ فقط عدد." },
+      "amount_unit": {
+        "type": "string",
+        "enum": ["toman", "rial"],
+        "description": "واحد مبلغ جدید."
+      },
+      "date": { "type": "string", "description": "تاریخ جدید تراکنش." },
+      "account": { "type": "string", "description": "حساب جدید؛ نام یا شناسه." },
+      "category": { "type": "string", "description": "دسته‌بندی جدید؛ نام یا شناسه. برای حذف دسته بگو «بدون دسته»." },
+      "clear_category": { "type": "boolean", "description": "اگر true باشد دسته‌بندی حذف می‌شود." },
+      "description": { "type": "string", "description": "توضیح جدید تراکنش." }
+    },
+    "required": ["action"],
+    "additionalProperties": false
+  }
+}

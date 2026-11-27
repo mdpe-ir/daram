@@ -19,7 +19,6 @@ import '../features/ai/data/tool_executor.dart';
 import '../features/ai/data/tool_registry.dart';
 import '../features/ai/domain/ai_models.dart';
 import '../features/assets/data/asset_repository.dart';
-import '../features/assets/data/navasan_rates.dart';
 import '../features/categories/data/category_repository.dart';
 import '../features/categories/domain/category.dart';
 import '../features/chat/data/chat_repository.dart';
@@ -27,6 +26,7 @@ import '../features/chat/data/confirmation_service.dart';
 import '../features/chat/data/undo_service.dart';
 import '../features/dashboard/data/analytics_repository.dart';
 import '../features/loans/data/loan_repository.dart';
+import '../features/market/data/market_price_service.dart';
 import '../features/obligations/data/obligation_repository.dart';
 import '../features/settings/data/export_service.dart';
 import '../features/settings/data/settings_repository.dart';
@@ -134,6 +134,9 @@ final confirmationServiceProvider = Provider<ConfirmationService>(
     transactions: ref.watch(transactionRepositoryProvider),
     transfers: ref.watch(transferRepositoryProvider),
     loans: ref.watch(loanRepositoryProvider),
+    assets: ref.watch(assetRepositoryProvider),
+    obligations: ref.watch(obligationRepositoryProvider),
+    operations: ref.watch(operationRepositoryProvider),
   ),
 );
 
@@ -165,8 +168,9 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
-final navasanRatesProvider = Provider<NavasanRates>(
-  (ref) => NavasanRates(ref.watch(dioProvider)),
+/// Live market rates (fiat, gold and crypto) from DARAM's own sources.
+final marketPriceServiceProvider = Provider<MarketPriceService>(
+  (ref) => MarketPriceService(ref.watch(dioProvider)),
 );
 
 /// Local, bounded diagnostics used by the settings → logs screen.
@@ -204,6 +208,7 @@ final promptBuilderProvider = FutureProvider<PromptBuilder>(
 
 final toolExecutorProvider = FutureProvider<ToolExecutor>((ref) async {
   final registry = await ref.watch(toolRegistryProvider.future);
+  final marketRates = ref.watch(marketPriceServiceProvider);
   return ToolExecutor(
     registry: registry,
     accounts: ref.watch(accountRepositoryProvider),
@@ -216,6 +221,10 @@ final toolExecutorProvider = FutureProvider<ToolExecutor>((ref) async {
       ref.watch(transactionRepositoryProvider),
     ),
     chat: ref.watch(chatRepositoryProvider),
+    assets: ref.watch(assetRepositoryProvider),
+    obligations: ref.watch(obligationRepositoryProvider),
+    transfers: ref.watch(transferRepositoryProvider),
+    marketRates: (kind, code) => marketRates.quoteForAsset(kind, code: code),
   );
 });
 

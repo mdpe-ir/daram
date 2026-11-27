@@ -105,12 +105,26 @@ enum LedgerSource {
 enum FinancialOperationKind {
   addAccount('افزودن حساب'),
   updateAccount('ویرایش حساب'),
+  archiveAccount('بایگانی حساب'),
+  unarchiveAccount('بازگردانی حساب'),
   addTransaction('ثبت تراکنش'),
   updateTransaction('ویرایش تراکنش'),
   deleteTransaction('حذف تراکنش'),
   addTransfer('انتقال بین حساب'),
+  updateTransfer('ویرایش انتقال'),
+  deleteTransfer('حذف انتقال'),
   addLoan('ثبت وام'),
+  updateLoan('ویرایش وام'),
+  archiveLoan('بایگانی وام'),
+  deleteLoan('حذف وام'),
   markInstallmentPaid('پرداخت قسط'),
+  addAsset('افزودن دارایی'),
+  updateAsset('ویرایش دارایی'),
+  deleteAsset('حذف دارایی'),
+  addObligation('افزودن طلب/بدهی'),
+  updateObligation('ویرایش طلب/بدهی'),
+  deleteObligation('حذف طلب/بدهی'),
+  obligationPayment('پرداخت طلب/بدهی'),
   addCategory('افزودن دسته‌بندی');
 
   const FinancialOperationKind(this.labelFa);

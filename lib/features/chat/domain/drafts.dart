@@ -30,6 +30,15 @@ sealed class FinancialDraft {
         DaramTool.markInstallmentPaid => InstallmentPaymentDraft.fromPayload(
           action.payload,
         ),
+        DaramTool.manageAccount ||
+        DaramTool.manageTransaction ||
+        DaramTool.manageTransfer ||
+        DaramTool.manageLoan ||
+        DaramTool.manageAsset ||
+        DaramTool.manageObligation => RecordChangeDraft.fromPayload(
+          tool,
+          action.payload,
+        ),
         _ => null,
       };
     } on Object {
@@ -479,5 +488,75 @@ class InstallmentPaymentDraft extends FinancialDraft {
     'paidAmountRial': paidAmountRial.value,
     'scheduledAmountRial': scheduledAmountRial.value,
     'dueDate': dueDate?.toIso(),
+  };
+}
+
+/// A draft that changes an existing record: an edit, archive, delete or a new
+/// payment/asset/obligation entry.
+///
+/// Unlike the `add_*` drafts, these carry a canonical `fields` map instead of a
+/// dedicated class per shape. The card renders it generically and the
+/// confirmation service applies the same repository validation as manual entry.
+class RecordChangeDraft extends FinancialDraft {
+  const RecordChangeDraft({
+    required this.tool,
+    required this.recordType,
+    required this.action,
+    required this.summaryText,
+    required this.fields,
+    this.recordId,
+    List<String> notes = const [],
+  }) : _notes = notes;
+
+  factory RecordChangeDraft.fromPayload(
+    DaramTool tool,
+    Map<String, Object?> payload,
+  ) {
+    final rawFields = payload['fields'];
+    final rawNotes = payload['notes'];
+    return RecordChangeDraft(
+      tool: tool,
+      recordType: _string(payload, 'recordType', fallback: 'record'),
+      action: _string(payload, 'action', fallback: 'update'),
+      recordId: _stringOrNull(payload, 'recordId'),
+      summaryText: _string(payload, 'summary', fallback: 'تغییر رکورد'),
+      fields: rawFields is Map
+          ? rawFields.map((key, value) => MapEntry('$key', value))
+          : const <String, Object?>{},
+      notes: rawNotes is List
+          ? [for (final item in rawNotes) '$item']
+          : const <String>[],
+    );
+  }
+
+  @override
+  final DaramTool tool;
+
+  /// `account`, `transaction`, `transfer`, `loan`, `asset`, `obligation`.
+  final String recordType;
+
+  /// `update`, `delete`, `archive`, `unarchive`, `create`, `add_payment`.
+  final String action;
+  final String? recordId;
+  final String summaryText;
+
+  /// Canonical new values (Rial integers, ISO dates, resolved ids/names).
+  final Map<String, Object?> fields;
+  final List<String> _notes;
+
+  @override
+  String get title => summaryText;
+
+  @override
+  List<String> get notes => _notes;
+
+  @override
+  Map<String, Object?> toPayload() => {
+    'recordType': recordType,
+    'action': action,
+    if (recordId != null) 'recordId': recordId,
+    'summary': summaryText,
+    'fields': fields,
+    if (_notes.isNotEmpty) 'notes': _notes,
   };
 }

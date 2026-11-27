@@ -2,10 +2,11 @@ import '../formatting/persian_formatting.dart';
 
 /// Catalog of fiat currencies the asset editor offers for picker-based entry.
 ///
-/// Only codes published by the Navasan snapshot (the rate source used by the
-/// app) are listed, so every selectable currency can also have its rate
-/// fetched automatically. Popular holdings come first; the rest are grouped by
-/// region so the long list stays scannable and predictable.
+/// Every ISO code a user is likely to hold is listed; DARAM's own market
+/// sources (Bonbast/Chand) quote the 28 most traded ones automatically and the
+/// editor falls back to a manual rate for the rest. Popular holdings come
+/// first; the rest are grouped by region so the long list stays scannable and
+/// predictable.
 class WorldCurrency {
   const WorldCurrency({
     required this.code,

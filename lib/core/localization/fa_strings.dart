@@ -59,6 +59,8 @@ abstract final class FaStrings {
   static const quickTodayReport = 'گزارش امروز';
   static const quickMonthReport = 'گزارش این ماه';
   static const quickLoans = 'وضعیت وام‌ها';
+  static const quickOverview = 'وضعیت مالی من';
+  static const quickRoadmap = 'نقشه راه مالی';
 
   // Records
   static const accounts = 'حساب‌ها';
